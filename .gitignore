@@ -1,0 +1,8 @@
+# colcon build artifacts (regenerated inside the container)
+/build/
+/install/
+/log/
+
+# Python
+__pycache__/
+*.pyc

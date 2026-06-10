@@ -1,0 +1,21 @@
+{
+  "name": "ugv_ws (ROS 2 Humble)",
+  "build": { "dockerfile": "../Dockerfile", "context": ".." },
+  "workspaceFolder": "/home/ws/ugv_ws",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/home/ws/ugv_ws,type=bind",
+  "remoteUser": "root",
+  "runArgs": [
+    "--network=host",
+    "-e", "DISPLAY=${localEnv:DISPLAY}",
+    "-e", "QT_X11_NO_MITSHM=1",
+    "-e", "UGV_MODEL=ugv_rover",
+    "-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw",
+    "--device", "/dev/dri",
+    "-v", "/dev/input:/dev/input"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-iot.vscode-ros", "ms-python.python", "ms-vscode.cpptools"]
+    }
+  }
+}
