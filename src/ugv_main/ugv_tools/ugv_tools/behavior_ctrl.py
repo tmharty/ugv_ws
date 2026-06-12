@@ -11,14 +11,6 @@ import threading
 import json
 import queue
 
-a = "point_a" 
-b = "point_b" 
-c = "point_c" 
-d = "point_d" 
-e = "point_e" 
-f = "point_f" 
-g = "point_g" 
-
 class BehaviorController(Node):
     def __init__(self):
         super().__init__('behavior_ctrl')     
@@ -39,7 +31,32 @@ class BehaviorController(Node):
         self.behavior_done = None
         self.map_pose = None
         self.points = {}
-        
+
+        # Allow-list of behaviors that may be invoked from a goal request.
+        # Commands are dispatched through this table instead of being executed
+        # as strings, so only these methods are ever reachable.
+        self.behaviors = {
+            "drive_on_heading": self.drive_on_heading,
+            "back_up": self.back_up,
+            "spin": self.spin,
+            "stop": self.stop,
+            "save_map_point": self.save_map_point,
+            "pub_nav_point": self.pub_nav_point,
+        }
+        # Behaviors whose data value is a saved map-point name rather than a number
+        self.point_behaviors = {"save_map_point", "pub_nav_point"}
+        # Short aliases for saved map points (preserves the original a..g payloads).
+        # A value not found here is passed through unchanged, so full names work too.
+        self.point_names = {
+            "a": "point_a",
+            "b": "point_b",
+            "c": "point_c",
+            "d": "point_d",
+            "e": "point_e",
+            "f": "point_f",
+            "g": "point_g",
+        }
+
         # Create a queue to store the commands
         self.command_queue = queue.Queue()
         # Create a lock to ensure thread safety
@@ -67,15 +84,14 @@ class BehaviorController(Node):
             for json_data in json_list:
                 command_type = json_data['type']
                 data_value = json_data['data']
-                
-                # Create the command string
-                if command_type == "stop":
-                    command_string = "self.stop()"
-                else:
-                    command_string = f"self.{command_type}({data_value})"
-                
-                # Put the command in the queue
-                self.command_queue.put(command_string)
+
+                # Reject anything that isn't an allowed behavior
+                if command_type not in self.behaviors:
+                    self.get_logger().warn(f'Ignoring unknown behavior: {command_type}')
+                    continue
+
+                # Put the validated command in the queue as a (type, data) tuple
+                self.command_queue.put((command_type, data_value))
         
         # Succeed the goal
         goal_handle.succeed()
@@ -87,20 +103,35 @@ class BehaviorController(Node):
     def process_commands(self):
         # Process the commands in the queue
         while rclpy.ok():
-            command_string = self.command_queue.get()
-            if command_string is None:
-                break  
-            self.execute_behavior(command_string)
+            command = self.command_queue.get()
+            if command is None:
+                break
+            self.execute_behavior(command)
             self.command_queue.task_done()
-    
-    def execute_behavior(self, command_string):
-        # Execute the command
-        print(command_string)
+
+    def execute_behavior(self, command):
+        # Dispatch the command to the matching behavior method
+        command_type, data_value = command
+        print(command_type, data_value)
+
+        func = self.behaviors.get(command_type)
+        if func is None:
+            # Should not happen (validated on enqueue), but guard anyway
+            self.get_logger().error(f"Unknown behavior: {command_type}")
+            return
+
         try:
-            exec(command_string)    
+            if command_type == "stop":
+                func()
+            elif command_type in self.point_behaviors:
+                # Resolve short aliases (a..g) to saved point names
+                point = self.point_names.get(data_value, data_value)
+                func(point)
+            else:
+                func(data_value)
         except Exception as e:
             self.get_logger().error(f"Error executing behavior: {e}")
-            self.get_logger().error(f"Executed command: {command_string}")
+            self.get_logger().error(f"Command: {command_type}({data_value})")
     
     def odom_callback(self, msg):
         # Get the orientation of the robot
