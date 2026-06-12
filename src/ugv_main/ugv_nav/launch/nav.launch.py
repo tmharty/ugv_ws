@@ -91,13 +91,13 @@ def launch_setup(context, *args, **kwargs):
         condition=LaunchConfigurationEquals('use_localization', 'emcl')
     )
     
-    # Include the nav2_bringup_cartographer launch description if use_localization is cartographer
-    nav2_bringup_cartographer_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(get_package_share_directory('ugv_nav'), 'launch/nav_bringup', 'bringup_launch_cartographer.launch.py')),
+    # Include the nav2_bringup_slam_toolbox launch description if use_localization is slam_toolbox
+    nav2_bringup_slam_toolbox_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(get_package_share_directory('ugv_nav'), 'launch/nav_bringup', 'bringup_launch_slam_toolbox.launch.py')),
          launch_arguments={
             'params_file': os.path.join(get_package_share_directory('ugv_nav'), 'param', 'emcl_dwa.yaml')
         }.items(),
-        condition=LaunchConfigurationEquals('use_localization', 'cartographer')
+        condition=LaunchConfigurationEquals('use_localization', 'slam_toolbox')
     )
     
     # Include the robot_pose_publisher launch description
@@ -113,7 +113,7 @@ def launch_setup(context, *args, **kwargs):
         nav2_bringup_emcl_launch,
         emcl_launch,
         robot_pose_publisher_launch,
-        nav2_bringup_cartographer_launch
+        nav2_bringup_slam_toolbox_launch
     ]
 
 # Function to generate the launch description
@@ -121,7 +121,7 @@ def generate_launch_description():
     # Return the launch description
     return LaunchDescription([
         DeclareLaunchArgument('use_localplan', default_value='teb', description='Choose which localplan to use: dwa,teb'),
-        DeclareLaunchArgument('use_localization', default_value='amcl', description='Choose which use_localization to use: amcl,cartographer'),
+        DeclareLaunchArgument('use_localization', default_value='amcl', description='Choose which use_localization to use: amcl,emcl,slam_toolbox'),
         OpaqueFunction(function=launch_setup)
     ])
 

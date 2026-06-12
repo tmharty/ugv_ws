@@ -24,7 +24,7 @@
         
         ```jsx
         cd /home/ws/ugv_ws
-        colcon build --packages-select apriltag apriltag_msgs apriltag_ros cartographer costmap_converter_msgs costmap_converter emcl2 explore_lite openslam_gmapping slam_gmapping ldlidar rf2o_laser_odometry robot_pose_publisher teb_msgs teb_local_planner vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server ugv_base_node ugv_interface
+        colcon build --packages-select apriltag apriltag_msgs apriltag_ros costmap_converter_msgs costmap_converter emcl2 explore_lite ldlidar rf2o_laser_odometry robot_pose_publisher teb_msgs teb_local_planner vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server ugv_base_node ugv_interface
         colcon build --packages-select ugv_bringup ugv_chat_ai ugv_description ugv_gazebo ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app --symlink-install 
         echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
         echo "eval "$(register-python-argcomplete ros2)"" >> ~/.bashrc
@@ -44,7 +44,7 @@
         
         ```jsx
         cd /home/ws/ugv_ws
-        colcon build --packages-select apriltag apriltag_msgs apriltag_ros cartographer costmap_converter_msgs costmap_converter emcl2 explore_lite openslam_gmapping slam_gmapping ldlidar rf2o_laser_odometry robot_pose_publisher teb_msgs teb_local_planner vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server ugv_base_node ugv_interface
+        colcon build --packages-select apriltag apriltag_msgs apriltag_ros costmap_converter_msgs costmap_converter emcl2 explore_lite ldlidar rf2o_laser_odometry robot_pose_publisher teb_msgs teb_local_planner vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server ugv_base_node ugv_interface
         colcon build --packages-select ugv_bringup ugv_chat_ai ugv_description ugv_gazebo ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app --symlink-install 
         source install/setup.bash 
         ```
@@ -77,7 +77,7 @@
     apt-get install alsa-utils
     apt install python3-colcon-argcomplete
     
-    apt install ros-humble-cartographer-*
+    apt install ros-humble-slam-toolbox
     apt install ros-humble-desktop-*
     apt install ros-humble-joint-state-publisher-*
     apt install ros-humble-nav2-*
@@ -85,7 +85,7 @@
     apt install ros-humble-rqt-*
     apt install ros-humble-rtabmap-*
     apt install ros-humble-usb-cam
-    apt install ros-humble-depthai-*
+    apt install ros-humble-depthai-ros
     
     #Simulation virtual machine installation
     apt install gazebo
@@ -161,9 +161,6 @@
     > > apriltag_ros
     > > 
     > 
-    > > cartographer
-    > > 
-    > 
     > > costmap_converter
     > > 
     > 
@@ -171,9 +168,6 @@
     > > 
     > 
     > > explore_lite
-    > > 
-    > 
-    > > gmapping
     > > 
     > 
     > > ldlidar
@@ -441,13 +435,11 @@ Enter docker and start ssh to remotely access docker and the visual interface
                     
 - Mapping
     - 2D (LiDAR)
-        - Gmapping
+        - Slam_toolbox
             
             ```jsx
-             ros2 launch ugv_slam gmapping.launch.py use_rviz:=true
+            ros2 launch ugv_slam slam_toolbox.launch.py use_rviz:=true
             ```
-            
-            [![](https://res.cloudinary.com/marcomontalbano/image/upload/v1727493329/video_to_markdown/images/youtube--cBiuYmxGWks-c05b58ac6eb4c4700831b2b3070cd403.jpg)](https://youtu.be/cBiuYmxGWks "")
             
             control car
             
@@ -458,45 +450,15 @@ Enter docker and start ssh to remotely access docker and the visual interface
             save map
             
             ```jsx
-            ./save_2d_gmapping_map.sh
+            ./save_2d_map.sh
             ```
             
-            ![image.png](images/Save_2d_gmapping_map.sh.png)
-            
-            save_2d_gmapping_map.sh内容
+            save_2d_map.sh content
             
             ```jsx
             cd /home/ws/ugv_ws/src/ugv_main/ugv_nav/maps
             ros2 run nav2_map_server map_saver_cli -f ./map
-            ```
-            
-        - Cartographer
-            
-            ```jsx
-            ros2 launch ugv_slam cartographer.launch.py use_rviz:=true
-            ```
-            
-            [![](https://res.cloudinary.com/marcomontalbano/image/upload/v1727491911/video_to_markdown/images/youtube--dHyNeuJ0k3U-c05b58ac6eb4c4700831b2b3070cd403.jpg)](https://youtu.be/dHyNeuJ0k3U "")
-            
-            control car
-            
-            ```jsx
-            ros2 run ugv_tools keyboard_ctrl
-            ```
-            
-            save map
-            
-            ```jsx
-            ./save_2d_cartographer_map.sh
-            ```
-            
-            ![image.png](images/Save_2d_cartographer_map.sh.png)
-            
-            save_2d_cartographer_map.sh内容
-            
-            ```jsx
-            cd /home/ws/ugv_ws/src/ugv_main/ugv_nav/maps
-            ros2 run nav2_map_server map_saver_cli -f ./map && ros2 service call /write_state cartographer_ros_msgs/srv/WriteState "{filename: '/home/ws/ugv_ws/src/ugv_main/ugv_nav/maps/map.pbstream'}"
+            ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph "{filename: '/home/ws/ugv_ws/src/ugv_main/ugv_nav/maps/map'}"
             ```
             
     - 3D (lidar + depth camera)
@@ -536,7 +498,7 @@ Enter docker and start ssh to remotely access docker and the visual interface
     - 2D
         - Local localization
             
-            use_localization amcl（default），emcl，cartographer
+            use_localization amcl（default），emcl，slam_toolbox
             
             - amcl
                 
@@ -560,15 +522,13 @@ Enter docker and start ssh to remotely access docker and the visual interface
                 ros2 launch ugv_nav nav.launch.py use_localization:=emcl use_rviz:=true
                 ```
                 
-            - cartographer
+            - slam_toolbox
                 
-                Note that you need to use Cartographer to build the map before you can proceed.
+                Note that you need to use slam_toolbox to build and save the map (./save_2d_map.sh writes the serialized map.posegraph) before you can proceed.
                 
                 ```jsx
-                ros2 launch ugv_nav nav.launch.py use_localization:=cartographer use_rviz:=true
+                ros2 launch ugv_nav nav.launch.py use_localization:=slam_toolbox use_rviz:=true
                 ```
-                
-                ![image.png](images/Cartographer%20pure_localization.png)
                 
                 After startup, if the accurate position has not been located, you can control the car and simply move it to assist in the initial positioning.
                 
@@ -637,7 +597,7 @@ Enter docker and start ssh to remotely access docker and the visual interface
     - Save map
             
         ```jsx
-        ./save_2d_gmapping_map.sh
+        ./save_2d_map.sh
         ```
         
 - Web ai interaction
@@ -840,10 +800,10 @@ Enter docker and start ssh to remotely access docker and the visual interface
             
             ![image.png](images/Gazebo%202D%20mapping.png)
             
-            - Gmapping
+            - Slam_toolbox
                 
                 ```elm
-                ros2 launch ugv_gazebo gmapping.launch.py
+                ros2 launch ugv_gazebo slam_toolbox.launch.py
                 ```
                 
                 control car
@@ -855,39 +815,15 @@ Enter docker and start ssh to remotely access docker and the visual interface
                 save map
                 
                 ```jsx
-                ./save_2d_gmapping_map_gazebo.sh
+                ./save_2d_map_gazebo.sh
                 ```
                 
-                save_2d_gmapping_map_gazebo.sh content
+                save_2d_map_gazebo.sh content
                 
                 ```jsx
                 cd /home/ws/ugv_ws/src/ugv_main/ugv_gazebo/maps
                 ros2 run nav2_map_server map_saver_cli -f ./map
-                ```
-                
-            - Cartographer
-                
-                ```elm
-                ros2 launch ugv_gazebo cartographer.launch.py
-                ```
-                
-                control car
-                
-                ```jsx
-                ros2 run ugv_tools keyboard_ctrl
-                ```
-                
-                save map
-                
-                ```jsx
-                ./save_2d_cartographer_map_gazebo.sh
-                ```
-                
-                save_2d_cartographer_map_gazebo.sh content
-                
-                ```jsx
-                cd /home/ws/ugv_ws/src/ugv_main/ugv_gazebo/maps
-                ros2 run nav2_map_server map_saver_cli -f ./map && ros2 service call /write_state cartographer_ros_msgs/srv/WriteState "{filename: '/home/ws/ugv_ws/src/ugv_main/ugv_gazebo/maps/map.pbstream'}"
+                ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph "{filename: '/home/ws/ugv_ws/src/ugv_main/ugv_gazebo/maps/map'}"
                 ```
                 
         - 3D (lidar + depth camera)
@@ -925,7 +861,7 @@ Enter docker and start ssh to remotely access docker and the visual interface
         - 2D
             - Local positioning
                 
-                use_localization amcl（default），emcl，cartographer
+                use_localization amcl（default），emcl，slam_toolbox
                 
                 - amcl
                     
@@ -949,12 +885,12 @@ Enter docker and start ssh to remotely access docker and the visual interface
                     ros2 launch ugv_gazebo nav.launch.py use_localization:=emcl 
                     ```
                     
-                - cartographer
+                - slam_toolbox
                     
-                    Note that you need to use Cartographer to build the map before you can proceed.
+                    Note that you need to use slam_toolbox to build and save the map (./save_2d_map_gazebo.sh writes the serialized map.posegraph) before you can proceed.
                     
                     ```jsx
-                    ros2 launch ugv_gazebo nav.launch.py use_localization:=cartographer 
+                    ros2 launch ugv_gazebo nav.launch.py use_localization:=slam_toolbox 
                     ```
                     
                     After startup, if the accurate position has not been located, you can control the car and simply move it to assist in the initial positioning.

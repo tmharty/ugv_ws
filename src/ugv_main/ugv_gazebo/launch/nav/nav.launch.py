@@ -82,14 +82,14 @@ def launch_setup(context, *args, **kwargs):
         condition=LaunchConfigurationEquals('use_localization', 'emcl')
     )
     
-    # Get the path to the Cartographer parameter file
-    nav2_bringup_cartographer_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(get_package_share_directory('ugv_gazebo'), 'launch/nav_bringup', 'bringup_launch_cartographer.launch.py')),
+    # Get the path to the slam_toolbox localization parameter file
+    nav2_bringup_slam_toolbox_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(get_package_share_directory('ugv_gazebo'), 'launch/nav_bringup', 'bringup_launch_slam_toolbox.launch.py')),
          launch_arguments={
             'params_file': os.path.join(get_package_share_directory('ugv_gazebo'), 'param', 'emcl_dwa.yaml'),
             'use_sim_time': use_sim_time
         }.items(),
-        condition=LaunchConfigurationEquals('use_localization', 'cartographer')
+        condition=LaunchConfigurationEquals('use_localization', 'slam_toolbox')
     )
     
     # Create the RViz2 node
@@ -118,7 +118,7 @@ def launch_setup(context, *args, **kwargs):
         nav2_bringup_amcl_launch,
         nav2_bringup_emcl_launch,
         emcl_launch,
-        nav2_bringup_cartographer_launch,
+        nav2_bringup_slam_toolbox_launch,
         rviz2_node,
         robot_pose_publisher_node
     ]
@@ -127,7 +127,7 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_localplan', default_value='teb', description='Choose which localplan to use: dwa,teb'),
-        DeclareLaunchArgument('use_localization', default_value='amcl', description='Choose which use_localization to use: amcl,emcl'),
+        DeclareLaunchArgument('use_localization', default_value='amcl', description='Choose which use_localization to use: amcl,emcl,slam_toolbox'),
         OpaqueFunction(function=launch_setup)
     ])
 

@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3-pip python3-colcon-argcomplete alsa-utils \
       ros-humble-gazebo-* \
-      ros-humble-cartographer-* \
+      ros-humble-slam-toolbox \
       ros-humble-joint-state-publisher ros-humble-joint-state-publisher-gui \
       ros-humble-nav2-* \
       ros-humble-rosbridge-* \

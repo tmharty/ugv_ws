@@ -34,7 +34,7 @@ find_package(ament_cmake REQUIRED)
 #  DESTINATION lib/${PROJECT_NAME})
 
 include_directories(include/ugv_slam)
-install(DIRECTORY launch rviz DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY launch rviz config DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
