@@ -1,0 +1,74 @@
+# ros2_control configuration for the UGV beast.
+#
+# Loaded by the controller_manager (ros2_control_node) on the real robot. The same
+# diff_drive_controller + broadcaster config is intended to be reused for the Gazebo
+# sim after the Jazzy / new-Gazebo upgrade — only the URDF <hardware> plugin differs.
+#
+# Pipeline: diff_cont publishes wheel odometry on /odom_raw (TF disabled), which the
+# robot_localization EKF fuses with /imu/data to produce /odom and the odom->base_footprint
+# transform — matching the legacy base_node_ekf wiring.
+
+controller_manager:
+  ros__parameters:
+    update_rate: 50  # Hz
+    use_sim_time: false
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    imu_sensor_broadcaster:
+      type: imu_sensor_broadcaster/IMUSensorBroadcaster
+
+    diff_cont:
+      type: diff_drive_controller/DiffDriveController
+
+# --------------------------------------------------------------------------------
+diff_cont:
+  ros__parameters:
+    left_wheel_names: ["left_up_wheel_link_joint", "left_down_wheel_link_joint"]
+    right_wheel_names: ["right_up_wheel_link_joint", "right_down_wheel_link_joint"]
+
+    wheel_separation: 0.175
+    wheel_radius: 0.025
+
+    # The two wheels per side share one encoder, so don't average a phantom track width.
+    wheel_separation_multiplier: 1.0
+    left_wheel_radius_multiplier: 1.0
+    right_wheel_radius_multiplier: 1.0
+
+    publish_rate: 30.0
+    base_frame_id: base_footprint
+    odom_frame_id: odom
+
+    # The EKF owns the odom->base_footprint TF; the controller only publishes the
+    # wheel-odometry message (remapped to /odom_raw in the launch file).
+    enable_odom_tf: false
+    open_loop: false
+    position_feedback: true
+
+    # Accept plain geometry_msgs/Twist on /cmd_vel (remapped in the launch file) so
+    # every existing publisher (joy, keyboard, behavior_ctrl, Nav2) works unchanged.
+    use_stamped_vel: false
+
+    # Covariances for the wheel-odometry message consumed by the EKF.
+    pose_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
+    twist_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
+
+    # Velocity / acceleration limits (mirrors the legacy Gazebo diff-drive limits).
+    linear.x.has_velocity_limits: true
+    linear.x.max_velocity: 0.8
+    linear.x.min_velocity: -0.8
+    linear.x.has_acceleration_limits: true
+    linear.x.max_acceleration: 2.5
+
+    angular.z.has_velocity_limits: true
+    angular.z.max_velocity: 1.0
+    angular.z.min_velocity: -1.0
+    angular.z.has_acceleration_limits: true
+    angular.z.max_acceleration: 2.5
+
+# --------------------------------------------------------------------------------
+imu_sensor_broadcaster:
+  ros__parameters:
+    sensor_name: imu_sensor
+    frame_id: base_imu_link

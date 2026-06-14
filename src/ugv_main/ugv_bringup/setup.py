@@ -15,6 +15,7 @@ setup(
         (os.path.join('share',package_name,'launch'),glob(os.path.join('launch','*launch.py'))),
         (os.path.join('share', package_name, 'rviz'), glob(os.path.join('rviz', '*'))),
         (os.path.join('share', package_name, 'param'), glob(os.path.join('param', '*.yaml'))),
+        (os.path.join('share', package_name, 'config'), glob(os.path.join('config', '*.yaml'))),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -27,6 +28,7 @@ setup(
         'console_scripts': [
             'ugv_bringup = ugv_bringup.ugv_bringup:main',
             'ugv_driver = ugv_bringup.ugv_driver:main',
+            'battery_alarm = ugv_bringup.battery_alarm:main',
         ],
     },
 )

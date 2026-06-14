@@ -1,0 +1,12 @@
+<library path="ugv_hardware">
+  <class
+    name="ugv_hardware/UgvSystemHardware"
+    type="ugv_hardware::UgvSystemHardware"
+    base_class_type="hardware_interface::SystemInterface">
+    <description>
+      ros2_control SystemInterface for the UGV. Owns the ESP32 UART and exposes the drive
+      wheels and IMU as standard ros2_control interfaces while bridging pan-tilt / LED /
+      mag / voltage that share the same serial link.
+    </description>
+  </class>
+</library>

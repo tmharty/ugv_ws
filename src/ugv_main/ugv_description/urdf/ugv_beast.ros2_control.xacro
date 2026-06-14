@@ -1,0 +1,79 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    ros2_control system block for the UGV beast.
+
+    Real robot  -> ugv_hardware/UgvSystemHardware (owns the ESP32 UART).
+    use_sim=true -> gazebo_ros2_control GazeboSystem. This branch is a FUTURE HOOK:
+    the Gazebo Classic sim still runs on the legacy planar_move plugin today, and true
+    sim parity is deferred to the Jazzy / new-Gazebo upgrade. Keeping the branch here
+    means the upgrade only has to swap this one <plugin> (the controller YAML and the
+    interface declarations below carry over unchanged).
+  -->
+  <xacro:macro name="ugv_ros2_control"
+               params="name use_sim:=false
+                       serial_device:=/dev/ttyAMA0
+                       wheel_radius:=0.025
+                       wheel_separation:=0.175">
+
+    <ros2_control name="${name}" type="system">
+
+      <hardware>
+        <xacro:if value="${use_sim}">
+          <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+        </xacro:if>
+        <xacro:unless value="${use_sim}">
+          <plugin>ugv_hardware/UgvSystemHardware</plugin>
+          <param name="serial_device">${serial_device}</param>
+          <param name="baud">115200</param>
+          <param name="wheel_radius">${wheel_radius}</param>
+          <param name="wheel_separation">${wheel_separation}</param>
+          <param name="left_wheel_names">left_up_wheel_link_joint,left_down_wheel_link_joint</param>
+          <param name="right_wheel_names">right_up_wheel_link_joint,right_down_wheel_link_joint</param>
+        </xacro:unless>
+      </hardware>
+
+      <!-- Drive wheels: velocity command, position + velocity feedback. -->
+      <xacro:macro name="wheel_joint" params="joint_name">
+        <joint name="${joint_name}">
+          <command_interface name="velocity"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+      </xacro:macro>
+      <xacro:wheel_joint joint_name="left_up_wheel_link_joint"/>
+      <xacro:wheel_joint joint_name="left_down_wheel_link_joint"/>
+      <xacro:wheel_joint joint_name="right_up_wheel_link_joint"/>
+      <xacro:wheel_joint joint_name="right_down_wheel_link_joint"/>
+
+      <!--
+        IMU sensor consumed by imu_sensor_broadcaster. The firmware provides no
+        orientation, so those interfaces default to identity (w=1); downstream the
+        complementary filter derives orientation from the raw gyro/accel fields.
+      -->
+      <sensor name="imu_sensor">
+        <state_interface name="orientation.x">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="orientation.y">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="orientation.z">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="orientation.w">
+          <param name="initial_value">1.0</param>
+        </state_interface>
+        <state_interface name="angular_velocity.x"/>
+        <state_interface name="angular_velocity.y"/>
+        <state_interface name="angular_velocity.z"/>
+        <state_interface name="linear_acceleration.x"/>
+        <state_interface name="linear_acceleration.y"/>
+        <state_interface name="linear_acceleration.z"/>
+      </sensor>
+
+    </ros2_control>
+  </xacro:macro>
+
+</robot>
