@@ -1,8 +1,30 @@
+#!/usr/bin/env bash
+# First-time setup + build of the ugv_ws workspace.
+#
+# Pulls pinned third-party dependencies (ugv_else.repos / vcstool), resolves
+# system + ROS dependencies (rosdep), builds, and wires up shell auto-sourcing.
+# See src/ugv_else/PROVENANCE.md for how the dependencies are sourced.
+set -e
 cd /home/ws/ugv_ws
-colcon build --packages-select apriltag apriltag_msgs apriltag_ros costmap_converter_msgs costmap_converter emcl2 ldlidar rf2o_laser_odometry robot_pose_publisher teb_msgs teb_local_planner vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server ugv_base_node ugv_interface
-colcon build --packages-select explore_lite ugv_bringup ugv_chat_ai ugv_description ugv_gazebo ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app --symlink-install
+
+# Tooling needed for the declarative dependency workflow.
+sudo apt-get update && sudo apt-get install -y python3-vcstool python3-rosdep
+sudo rosdep init 2>/dev/null || true
+rosdep update
+
+# 1) Fetch pinned third-party sources into src/ugv_else/.
+vcs import src < ugv_else.repos
+touch src/ugv_else/m-explore-ros2/map_merge/COLCON_IGNORE 2>/dev/null || true
+
+# 2) Resolve system + ROS dependencies declared in package.xml files.
+rosdep install --from-paths src --ignore-src -y --rosdistro "${ROS_DISTRO:-humble}"
+
+# 3) Build everything (package.xml dependencies determine build order).
+colcon build --symlink-install
+
+# 4) Convenience: auto-source ROS, the workspace, and argcomplete.
 echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
-echo "eval "$(register-python-argcomplete ros2)"" >> ~/.bashrc
-echo "eval "$(register-python-argcomplete colcon)"" >> ~/.bashrc
+echo 'eval "$(register-python-argcomplete ros2)"' >> ~/.bashrc
+echo 'eval "$(register-python-argcomplete colcon)"' >> ~/.bashrc
 echo "source /home/ws/ugv_ws/install/setup.bash" >> ~/.bashrc
-source ~/.bashrc 
+source ~/.bashrc

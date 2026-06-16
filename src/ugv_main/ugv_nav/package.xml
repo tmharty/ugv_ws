@@ -11,6 +11,13 @@
 
   <depend>nav2_bringup</depend>
 
+  <!-- launched by ugv_nav launch files / referenced by nav2 param plugins -->
+  <exec_depend>emcl2</exec_depend>
+  <exec_depend>teb_local_planner</exec_depend>
+  <exec_depend>costmap_converter</exec_depend>
+  <exec_depend>robot_pose_publisher</exec_depend>
+  <exec_depend>explore_lite</exec_depend>
+
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 

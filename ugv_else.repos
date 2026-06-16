@@ -1,0 +1,61 @@
+# Third-party dependencies for ugv_ws, pinned declaratively (vcs / vcstool format).
+#
+# Import with:   vcs import src/ugv_else < ugv_else.repos
+#
+# These replace the copies that were previously vendored into src/ugv_else/.
+# Each entry is pinned to the EXACT upstream commit whose tree matches the code
+# that used to be vendored (verified by git blob-hash comparison), so importing
+# reproduces the prior behaviour. To upgrade a dependency, bump its `version:`
+# to a newer commit/tag and re-run `vcs import` + `colcon build`.
+#
+# NOTE: three former ugv_else packages are NOT listed here because Waveshare made
+# real source modifications to them (not just config), so no upstream commit
+# matches. They remain committed under src/ugv_else/ and are documented in
+# src/ugv_else/PROVENANCE.md:  rf2o_laser_odometry, vizanti, robot_pose_publisher.
+repositories:
+  ugv_else/emcl2_ros2:
+    type: git
+    url: https://github.com/CIT-Autonomous-Robot-Lab/emcl2_ros2.git
+    version: 561ef8105818164f69f09e8df59bc440778bf7ee   # "added a parameter init (#56)" 2024-06-04
+
+  ugv_else/m-explore-ros2:
+    type: git
+    url: https://github.com/robo-friends/m-explore-ros2.git
+    version: e40e857b6af6e64f82514efdcd2cb9844ea77dc4   # explore_lite source verbatim; 2023-03-22
+    # NOTE: this repo also contains map_merge, which ugv_ws does not use. The build
+    # scripts drop a COLCON_IGNORE into it after import. The explore_lite params are
+    # maintained first-party in ugv_nav/param/explore_lite.yaml (launched via
+    # ugv_nav/launch/explore.launch.py), not from this package's bundled config.
+
+  ugv_else/teb_local_planner:
+    type: git
+    url: https://github.com/rst-tu-dortmund/teb_local_planner.git
+    version: 630a22e88dc9fd45be726a762edbb5b776bef231   # "Humble maintenance (#374)" 2022-09-12
+    # provides both teb_local_planner and teb_msgs (byte-identical to former vendored copy)
+
+  ugv_else/costmap_converter:
+    type: git
+    url: https://github.com/rst-tu-dortmund/costmap_converter.git
+    version: 9565858432664e9cfe0b3556e1809336c4ab06d4   # "0.1.2" 2020-06-22
+    # provides both costmap_converter and costmap_converter_msgs (byte-identical)
+
+  ugv_else/apriltag:
+    type: git
+    url: https://github.com/AprilRobotics/apriltag.git
+    version: 12cf56b93d8f1f95e528246c8000c36881fb43fb   # tag v3.4.2 (matches former vendored apriltag)
+
+  ugv_else/apriltag_ros:
+    type: git
+    url: https://github.com/Adlink-ROS/apriltag_ros.git
+    version: 29418213e36571243d5bad2e583daed9440eaf8c   # foxy-devel, 2022-08-18
+    # provides both apriltag_msgs and apriltag_ros. The UGV-specific composable-node
+    # launch (formerly apriltag_ros/launch/bringup.launch.py, added by Waveshare) now
+    # lives first-party at ugv_vision/launch/apriltag_bringup.launch.py.
+
+  ugv_else/ldlidar_stl_ros2:
+    type: git
+    url: https://github.com/ldrobotSensorTeam/ldlidar_stl_ros2.git
+    version: bf668a89baf722a787dadc442860dcbf33a82f5a   # driver source identical to former vendored "ldlidar"
+    # The former vendored copy was renamed ldlidar_stl_ros2 -> ldlidar and carried
+    # UGV-specific launch config (port /dev/ttyACM0, frame base_lidar_link, angle crop).
+    # That launch config now lives first-party in ugv_bringup/launch/ldlidar/.

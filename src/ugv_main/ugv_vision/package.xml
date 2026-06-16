@@ -13,6 +13,12 @@
   <test_depend>python3-pytest</test_depend>
   <depend>rclcpp</depend>
   <depend>std_msgs</depend>
+  <!-- apriltag detection: apriltag provides the C lib + the python `apriltag`
+       module used by apriltag_ctrl.py/apriltag_track_0.py; apriltag_ros provides
+       the composable detector node + tag config -->
+  <exec_depend>apriltag</exec_depend>
+  <exec_depend>apriltag_ros</exec_depend>
+  <exec_depend>apriltag_msgs</exec_depend>
   <export>
     <build_type>ament_python</build_type>
   </export>

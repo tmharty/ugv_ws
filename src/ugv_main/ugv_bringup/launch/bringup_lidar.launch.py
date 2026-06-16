@@ -48,7 +48,7 @@ def generate_launch_description():
     # Include laser lidar launch file
     laser_bringup_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('ldlidar'), 'launch', 'ldlidar.launch.py')
+            os.path.join(get_package_share_directory('ugv_bringup'), 'launch', 'ldlidar', 'ldlidar.launch.py')
         )
     )
 

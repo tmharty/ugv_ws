@@ -13,6 +13,9 @@
   <test_depend>python3-pytest</test_depend>
   <depend>rclcpp</depend>
   <depend>std_msgs</depend>
+  <!-- web visualizer launched from ugv_web_app bringup -->
+  <exec_depend>vizanti_server</exec_depend>
+  <exec_depend>rosbridge_suite</exec_depend>
   <export>
     <build_type>ament_python</build_type>
   </export>

@@ -6,3 +6,13 @@
 # Python
 __pycache__/
 *.pyc
+
+# Third-party deps fetched via `vcs import src < ugv_else.repos` (not vendored).
+# Pinned in ugv_else.repos; see src/ugv_else/PROVENANCE.md.
+/src/ugv_else/apriltag/
+/src/ugv_else/apriltag_ros/
+/src/ugv_else/costmap_converter/
+/src/ugv_else/emcl2_ros2/
+/src/ugv_else/m-explore-ros2/
+/src/ugv_else/ldlidar_stl_ros2/
+/src/ugv_else/teb_local_planner/

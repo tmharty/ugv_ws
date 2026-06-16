@@ -24,11 +24,18 @@
         
         ```jsx
         cd /home/ws/ugv_ws
-        colcon build --packages-select apriltag apriltag_msgs apriltag_ros costmap_converter_msgs costmap_converter emcl2 explore_lite ldlidar rf2o_laser_odometry robot_pose_publisher teb_msgs teb_local_planner vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server ugv_base_node ugv_interface
-        colcon build --packages-select ugv_bringup ugv_chat_ai ugv_description ugv_gazebo ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app --symlink-install 
+        # Tooling for the declarative dependency workflow
+        sudo apt-get update && sudo apt-get install -y python3-vcstool python3-rosdep
+        sudo rosdep init 2>/dev/null || true
+        rosdep update
+        # Fetch pinned third-party deps and resolve system/ROS deps, then build
+        vcs import src < ugv_else.repos
+        touch src/ugv_else/m-explore-ros2/map_merge/COLCON_IGNORE 2>/dev/null || true
+        rosdep install --from-paths src --ignore-src -y --rosdistro humble
+        colcon build --symlink-install
         echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
-        echo "eval "$(register-python-argcomplete ros2)"" >> ~/.bashrc
-        echo "eval "$(register-python-argcomplete colcon)"" >> ~/.bashrc
+        echo 'eval "$(register-python-argcomplete ros2)"' >> ~/.bashrc
+        echo 'eval "$(register-python-argcomplete colcon)"' >> ~/.bashrc
         echo "source /home/ws/ugv_ws/install/setup.bash" >> ~/.bashrc
         source ~/.bashrc 
         ```
@@ -44,26 +51,21 @@
         
         ```jsx
         cd /home/ws/ugv_ws
-        colcon build --packages-select apriltag apriltag_msgs apriltag_ros costmap_converter_msgs costmap_converter emcl2 explore_lite ldlidar rf2o_laser_odometry robot_pose_publisher teb_msgs teb_local_planner vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server ugv_base_node ugv_interface
-        colcon build --packages-select ugv_bringup ugv_chat_ai ugv_description ugv_gazebo ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app --symlink-install 
+        vcs import src < ugv_else.repos
+        touch src/ugv_else/m-explore-ros2/map_merge/COLCON_IGNORE 2>/dev/null || true
+        rosdep install --from-paths src --ignore-src -y --rosdistro humble
+        colcon build --symlink-install
         source install/setup.bash 
         ```
         
-    - Compile apriltag
+    - Third-party dependencies
         
-        ```jsx
-        cd /home/ws/ugv_ws
-        . build_apriltag.sh
-        ```
-        
-        build_apriltag.sh content
-        
-        ```jsx
-        cd /home/ws/ugv_ws/src/ugv_else/apriltag_ros/apriltag
-        cmake -B build -DCMAKE_BUILD_TYPE=Release
-        cmake --build build --target install
-        cd /home/ws/ugv_ws
-        ```
+        Dependencies under `src/ugv_else/` are no longer vendored in git. Most are
+        pinned to upstream commits in `ugv_else.repos` and fetched with `vcs import`
+        (run automatically by the build scripts above); the rest (genuine local
+        forks) stay committed. The apriltag library now builds as a normal colcon
+        package — the old separate `build_apriltag.sh` step is gone. See
+        `src/ugv_else/PROVENANCE.md` for the full mapping and upstream sources.
         
 - Ubuntu software：
     

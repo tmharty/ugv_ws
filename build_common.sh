@@ -1,5 +1,24 @@
+#!/usr/bin/env bash
+# Incremental build of the ugv_ws workspace.
+#
+# Third-party dependencies are no longer vendored in git: most are pulled from
+# pinned upstream commits via ugv_else.repos (vcstool), and system/ROS deps are
+# resolved with rosdep. A few genuinely-forked packages remain committed under
+# src/ugv_else/ (see src/ugv_else/PROVENANCE.md).
+set -e
 cd /home/ws/ugv_ws
-colcon build --packages-select apriltag apriltag_msgs apriltag_ros costmap_converter_msgs costmap_converter emcl2 explore_lite ldlidar rf2o_laser_odometry robot_pose_publisher teb_msgs teb_local_planner vizanti vizanti_cpp vizanti_demos vizanti_msgs vizanti_server ugv_base_node ugv_interface
-colcon build --packages-select ugv_bringup ugv_chat_ai ugv_description ugv_gazebo ugv_nav ugv_slam ugv_tools ugv_vision ugv_web_app --symlink-install 
-source install/setup.bash 
 
+# 1) Fetch pinned third-party sources into src/ugv_else/ (idempotent).
+vcs import src < ugv_else.repos
+
+# The m-explore-ros2 repo also ships a map_merge package that this workspace
+# does not use; tell colcon to skip it.
+touch src/ugv_else/m-explore-ros2/map_merge/COLCON_IGNORE 2>/dev/null || true
+
+# 2) Resolve system + ROS dependencies declared in package.xml files.
+rosdep install --from-paths src --ignore-src -y --rosdistro "${ROS_DISTRO:-humble}"
+
+# 3) Build everything (package.xml dependencies determine build order).
+colcon build --symlink-install
+
+source install/setup.bash

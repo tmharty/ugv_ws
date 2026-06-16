@@ -66,7 +66,7 @@ def generate_launch_description():
     )
     # Define the nodes to be launched
     laser_bringup_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
-        [os.path.join(get_package_share_directory('ldlidar'), 'launch'),
+        [os.path.join(get_package_share_directory('ugv_bringup'), 'launch', 'ldlidar'),
          '/ldlidar.launch.py'])
     )
     # Define the nodes to be launched

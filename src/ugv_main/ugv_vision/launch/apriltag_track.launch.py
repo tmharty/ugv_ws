@@ -16,10 +16,12 @@ def generate_launch_description():
          '/camera.launch.py'])
     )
     
-    # Include the apriltag tracking launch file
+    # Include the apriltag tracking launch file (UGV-specific composable-node setup,
+    # maintained first-party; the apriltag_ros nodes/cfg come from upstream via
+    # ugv_else.repos).
     apriltag_track_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
-        [os.path.join(get_package_share_directory('apriltag_ros'), 'launch'),
-         '/bringup.launch.py'])
+        [os.path.join(get_package_share_directory('ugv_vision'), 'launch'),
+         '/apriltag_bringup.launch.py'])
     )
                 
     # Return the launch description

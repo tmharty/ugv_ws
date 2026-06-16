@@ -101,7 +101,7 @@ def generate_launch_description():
     # --- lidar ---
     lidar_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('ldlidar'), 'launch', 'ldlidar.launch.py')))
+            os.path.join(get_package_share_directory('ugv_bringup'), 'launch', 'ldlidar', 'ldlidar.launch.py')))
 
     # --- low-battery alarm (moved out of ugv_driver) ---
     battery_alarm = Node(package='ugv_bringup', executable='battery_alarm', output='screen')
