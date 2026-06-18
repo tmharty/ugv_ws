@@ -24,7 +24,7 @@ done
 COMMON_ARGS=(
   -e DISPLAY="$DISPLAY"                       # :0 via XWayland
   -e QT_X11_NO_MITSHM=1
-  -e UGV_MODEL="${UGV_MODEL:-ugv_rover}"      # ugv_rover | ugv_beast | rasp_rover
+  -e UGV_MODEL="${UGV_MODEL:-ugv_beast}"      # ugv_rover | ugv_beast | rasp_rover
   -v /tmp/.X11-unix:/tmp/.X11-unix:rw
   --device /dev/dri                           # AMD GPU acceleration
   -v /dev/input:/dev/input                    # game controller (hotplug-friendly)
