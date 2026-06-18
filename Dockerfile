@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       python3-pip python3-colcon-argcomplete alsa-utils \
       python3-vcstool python3-rosdep \
       python3-numpy python3-dev \
-      libg2o-dev libsuitesparse-dev \
+      ros-humble-libg2o libsuitesparse-dev \
       ros-humble-gazebo-* \
       ros-humble-slam-toolbox \
       ros-humble-joint-state-publisher ros-humble-joint-state-publisher-gui \
