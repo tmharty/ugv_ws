@@ -27,8 +27,15 @@ rosdep update
 vcs import src < ugv_else.repos
 touch src/ugv_else/m-explore-ros2/map_merge/COLCON_IGNORE 2>/dev/null || true
 
+# The Jazzy upgrade dropped these deps: teb_local_planner + costmap_converter (no
+# Jazzy release; replaced by nav2 MPPI) and apriltag + apriltag_ros (now installed
+# via apt). Remove any stale copies a previous `vcs import` left behind so colcon
+# doesn't try to build them. (No-op if absent.)
+rm -rf src/ugv_else/teb_local_planner src/ugv_else/costmap_converter \
+       src/ugv_else/apriltag src/ugv_else/apriltag_ros
+
 # 2) Resolve system + ROS dependencies declared in package.xml files.
-rosdep install --from-paths src --ignore-src -y --rosdistro "${ROS_DISTRO:-humble}"
+rosdep install --from-paths src --ignore-src -y --rosdistro "${ROS_DISTRO:-jazzy}"
 
 # 3) Build everything (package.xml dependencies determine build order).
 if [ "$CLEAN" -eq 1 ]; then
@@ -37,7 +44,7 @@ fi
 colcon build --symlink-install
 
 # 4) Convenience: auto-source ROS, the workspace, and argcomplete.
-echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 echo 'eval "$(register-python-argcomplete ros2)"' >> ~/.bashrc
 echo 'eval "$(register-python-argcomplete colcon)"' >> ~/.bashrc
 echo "source /home/ws/ugv_ws/install/setup.bash" >> ~/.bashrc

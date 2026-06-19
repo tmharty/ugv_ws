@@ -15,11 +15,23 @@ upstream history, so the pins reproduce the previously-shipped behaviour.
 |---|---|---|---|
 | `emcl2` | [CIT-Autonomous-Robot-Lab/emcl2_ros2](https://github.com/CIT-Autonomous-Robot-Lab/emcl2_ros2) | `561ef81` | Source identical. Only the bundled `config/*.param.yaml` differed; ugv_nav passes its own emcl params, so this is irrelevant. |
 | `explore_lite` | [robo-friends/m-explore-ros2](https://github.com/robo-friends/m-explore-ros2) | `e40e857` | Source byte-identical. The 3 tuned params (commits `6772fc5`, `94f95f2`) now live in `ugv_nav/param/explore_lite.yaml`, launched via `ugv_nav/launch/explore.launch.py`. The repo's extra `map_merge` package is `COLCON_IGNORE`d by the build scripts. |
-| `teb_local_planner`, `teb_msgs` | [rst-tu-dortmund/teb_local_planner](https://github.com/rst-tu-dortmund/teb_local_planner) | `630a22e` | Byte-identical. |
-| `costmap_converter`, `costmap_converter_msgs` | [rst-tu-dortmund/costmap_converter](https://github.com/rst-tu-dortmund/costmap_converter) | `9565858` | Byte-identical (v0.1.2). |
-| `apriltag` | [AprilRobotics/apriltag](https://github.com/AprilRobotics/apriltag) | tag `v3.4.2` | Byte-identical. Builds as a normal colcon CMake package — the old manual `build_apriltag.sh` step is gone. |
-| `apriltag_msgs`, `apriltag_ros` | [Adlink-ROS/apriltag_ros](https://github.com/Adlink-ROS/apriltag_ros) (foxy-devel) | `2941821` | Source identical. The UGV-added composable-node launch (`bringup.launch.py`) now lives first-party at `ugv_vision/launch/apriltag_bringup.launch.py`. |
 | `ldlidar` → `ldlidar_stl_ros2` | [ldrobotSensorTeam/ldlidar_stl_ros2](https://github.com/ldrobotSensorTeam/ldlidar_stl_ros2) | `bf668a8` | Driver source identical. The former copy was renamed and carried UGV launch config; that config now lives first-party in `ugv_bringup/launch/ldlidar/` and targets the upstream `ldlidar_stl_ros2_node`. |
+
+## Installed via apt on Jazzy (no longer vendored or in `ugv_else.repos`)
+
+`apriltag` and `apriltag_ros` are released for ROS 2 Jazzy and are now pulled from
+apt (`ros-jazzy-apriltag`, `ros-jazzy-apriltag-ros`, declared in the `Dockerfile`
+and resolvable via rosdep). NOTE: the released `apriltag_ros` is the AprilRobotics
+package, whose node/params differ from the former Adlink `foxy-devel` fork
+(`2941821`); `ugv_vision`'s first-party apriltag launch/consumers were adapted to
+the released interface during the Jazzy upgrade.
+
+## Removed in the Jazzy upgrade
+
+`teb_local_planner`/`teb_msgs` (`630a22e`) and `costmap_converter`/
+`costmap_converter_msgs` (`9565858`, v0.1.2) were dropped: neither has a ROS 2
+Jazzy release, and the nav2 local planner was switched to the bundled
+`nav2_mppi_controller` (MPPI). See the `ugv_nav` param files.
 
 ## Still committed here (genuine source forks — no matching upstream commit)
 

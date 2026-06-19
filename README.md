@@ -31,9 +31,9 @@
         # Fetch pinned third-party deps and resolve system/ROS deps, then build
         vcs import src < ugv_else.repos
         touch src/ugv_else/m-explore-ros2/map_merge/COLCON_IGNORE 2>/dev/null || true
-        rosdep install --from-paths src --ignore-src -y --rosdistro humble
+        rosdep install --from-paths src --ignore-src -y --rosdistro jazzy
         colcon build --symlink-install
-        echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+        echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
         echo 'eval "$(register-python-argcomplete ros2)"' >> ~/.bashrc
         echo 'eval "$(register-python-argcomplete colcon)"' >> ~/.bashrc
         echo "source /home/ws/ugv_ws/install/setup.bash" >> ~/.bashrc
@@ -53,7 +53,7 @@
         cd /home/ws/ugv_ws
         vcs import src < ugv_else.repos
         touch src/ugv_else/m-explore-ros2/map_merge/COLCON_IGNORE 2>/dev/null || true
-        rosdep install --from-paths src --ignore-src -y --rosdistro humble
+        rosdep install --from-paths src --ignore-src -y --rosdistro jazzy
         colcon build --symlink-install
         source install/setup.bash 
         ```
@@ -69,7 +69,7 @@
         
 - Ubuntu software：
     
-    **Install according to wiki install ros2 humble**
+    **Install according to wiki install ros2 jazzy**
     
     ```jsx
     apt-get update 
@@ -79,19 +79,21 @@
     apt-get install alsa-utils
     apt install python3-colcon-argcomplete
     
-    apt install ros-humble-slam-toolbox
-    apt install ros-humble-desktop-*
-    apt install ros-humble-joint-state-publisher-*
-    apt install ros-humble-nav2-*
-    apt install ros-humble-rosbridge-*
-    apt install ros-humble-rqt-*
-    apt install ros-humble-rtabmap-*
-    apt install ros-humble-usb-cam
-    apt install ros-humble-depthai-ros
+    apt install ros-jazzy-slam-toolbox
+    apt install ros-jazzy-desktop-*
+    apt install ros-jazzy-joint-state-publisher-*
+    apt install ros-jazzy-nav2-*
+    apt install ros-jazzy-rosbridge-*
+    apt install ros-jazzy-rqt-*
+    apt install ros-jazzy-rtabmap-*
+    apt install ros-jazzy-usb-cam
+    apt install ros-jazzy-depthai-ros
+    apt install ros-jazzy-apriltag ros-jazzy-apriltag-ros
     
-    #Simulation virtual machine installation
-    apt install gazebo
-    apt install ros-humble-gazebo-*
+    # NOTE: Gazebo simulation is temporarily disabled on Jazzy. Gazebo Classic has
+    # no Jazzy release; the sim will be ported to new Gazebo (Harmonic / ros_gz) in
+    # a separate follow-up. The "Gazebo comprehensive simulation" section below is
+    # retained for reference but does not work on Jazzy yet.
     ```
     
 - Python3 Library：
@@ -211,8 +213,8 @@ Enter docker and start ssh to remotely access docker and the visual interface
         
         ```jsx
         cd /home/ws/ugv_ws
-        sudo chmod +x ros2_humble.sh remotessh.sh
-        ./ros2_humble.sh
+        sudo chmod +x ros2_jazzy.sh remotessh.sh
+        ./ros2_jazzy.sh
         ```
         
         1进入docker
@@ -540,7 +542,7 @@ Enter docker and start ssh to remotely access docker and the visual interface
                 
         - Local navigation
             
-            use_localplan dwa，teb（default）
+            use_localplan dwa，mppi（default）
             
             - dwa
                 
@@ -551,7 +553,7 @@ Enter docker and start ssh to remotely access docker and the visual interface
             - teb
                 
                 ```jsx
-                 ros2 launch ugv_nav nav.launch.py use_localplan:=teb use_rviz:=true
+                 ros2 launch ugv_nav nav.launch.py use_localplan:=mppi use_rviz:=true
                 ```
                 
     - 3D
@@ -566,7 +568,7 @@ Enter docker and start ssh to remotely access docker and the visual interface
                 
                 Turn on nav (you can wait slowly until the 3D data is loaded before navigating, it will take a while)
                 
-                use_localplan dwa，teb（default）
+                use_localplan dwa，mppi（default）
                 
                 - dwa
                     
@@ -577,7 +579,7 @@ Enter docker and start ssh to remotely access docker and the visual interface
                 - teb
                     
                     ```jsx
-                     ros2 launch ugv_nav nav_rtabmap.launch.py use_localplan:=teb use_rviz:=true
+                     ros2 launch ugv_nav nav_rtabmap.launch.py use_localplan:=mppi use_rviz:=true
                     ```
                     
 - Mapping and navigation are enabled at the same time (two-dimensional)
@@ -903,7 +905,7 @@ Enter docker and start ssh to remotely access docker and the visual interface
                     
             - Local navigation
                 
-                use_localplan dwa，teb（默认）
+                use_localplan dwa，mppi（默认）
                 
                 - dwa
                     
@@ -914,7 +916,7 @@ Enter docker and start ssh to remotely access docker and the visual interface
                 - teb
                     
                     ```jsx
-                     ros2 launch ugv_gazebo nav.launch.py use_localplan:=teb 
+                     ros2 launch ugv_gazebo nav.launch.py use_localplan:=mppi 
                     ```
                     
         - 3D
@@ -931,7 +933,7 @@ Enter docker and start ssh to remotely access docker and the visual interface
                     
                     ![image.png](images/Gazebo%20rtabmap%203D%20navigation.png)
                     
-                    use_localplan dwa，teb（默认）
+                    use_localplan dwa，mppi（默认）
                     
                     - dwa
                         
@@ -942,7 +944,7 @@ Enter docker and start ssh to remotely access docker and the visual interface
                     - teb
                         
                         ```jsx
-                         ros2 launch ugv_ngazebo nav_rtabmap.launch.py use_localplan:=teb
+                         ros2 launch ugv_ngazebo nav_rtabmap.launch.py use_localplan:=mppi
                         ```
                         
     - Mapping and navigation are enabled at the same time (two-dimensional)

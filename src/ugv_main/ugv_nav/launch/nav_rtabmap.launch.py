@@ -18,18 +18,19 @@ def get_localplan_config_file(context):
     # Get the ugv_nav package share directory
     ugv_nav_dir = get_package_share_directory('ugv_nav')
 
-    # Get the paths to the teb and dwa param files
-    teb_param_path = os.path.join(ugv_nav_dir, 'param', 'rtabmap_teb.yaml')
+    # Get the paths to the mppi and dwa param files.
+    # 'mppi' replaces the former 'teb' option (teb_local_planner has no Jazzy release).
+    mppi_param_path = os.path.join(ugv_nav_dir, 'param', 'rtabmap_mppi.yaml')
     dwa_param_path = os.path.join(ugv_nav_dir, 'param', 'rtabmap_dwa.yaml')
 
     # Create a dictionary to map the use_localplan configuration to the corresponding param file
     config_map = {
-        'teb': teb_param_path,
+        'mppi': mppi_param_path,
         'dwa': dwa_param_path
     }
 
     # Return the corresponding param file based on the use_localplan configuration
-    return config_map.get(use_localplan, teb_param_path)
+    return config_map.get(use_localplan, mppi_param_path)
 
 # Function to set up the launch description
 def launch_setup(context, *args, **kwargs):
@@ -86,7 +87,7 @@ def generate_launch_description():
 
     # Return the launch description
     return LaunchDescription([
-        DeclareLaunchArgument('use_localplan', default_value='dwa', description='Choose which localplan to use: dwa, teb'),
+        DeclareLaunchArgument('use_localplan', default_value='dwa', description='Choose which localplan to use: dwa, mppi'),
         OpaqueFunction(function=launch_setup)
     ])
 

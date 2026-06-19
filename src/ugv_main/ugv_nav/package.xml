@@ -13,8 +13,11 @@
 
   <!-- launched by ugv_nav launch files / referenced by nav2 param plugins -->
   <exec_depend>emcl2</exec_depend>
-  <exec_depend>teb_local_planner</exec_depend>
-  <exec_depend>costmap_converter</exec_depend>
+  <!-- local planner: nav2 MPPI (+ rotation shim) replaces teb_local_planner,
+       which has no Jazzy release. DWB (dwa option) ships with nav2. -->
+  <exec_depend>nav2_mppi_controller</exec_depend>
+  <exec_depend>nav2_rotation_shim_controller</exec_depend>
+  <exec_depend>nav2_dwb_controller</exec_depend>
   <exec_depend>robot_pose_publisher</exec_depend>
   <exec_depend>explore_lite</exec_depend>
 

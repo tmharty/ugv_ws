@@ -23,6 +23,8 @@
   <exec_depend>imu_sensor_broadcaster</exec_depend>
   <exec_depend>robot_localization</exec_depend>
   <exec_depend>ugv_hardware</exec_depend>
+  <!-- twist_stamper (Twist->TwistStamped for Jazzy diff_drive_controller) -->
+  <exec_depend>ugv_tools</exec_depend>
   <!-- lidar driver + laser odometry launched from ugv_bringup -->
   <exec_depend>ldlidar_stl_ros2</exec_depend>
   <exec_depend>rf2o_laser_odometry</exec_depend>

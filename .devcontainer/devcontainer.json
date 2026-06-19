@@ -1,5 +1,5 @@
 {
-  "name": "ugv_ws (ROS 2 Humble)",
+  "name": "ugv_ws (ROS 2 Jazzy)",
   "build": { "dockerfile": "../Dockerfile", "context": ".." },
   "workspaceFolder": "/home/ws/ugv_ws",
   "workspaceMount": "source=${localWorkspaceFolder},target=/home/ws/ugv_ws,type=bind",

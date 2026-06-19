@@ -34,12 +34,16 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch.substitutions import LaunchConfiguration
 
+# Released apriltag_ros (AprilRobotics) subscribes via image_transport to the base
+# topics `image_rect` and `camera_info`; remap them onto the UGV camera stream.
 image_topic_ = LaunchConfiguration("image_topic", default="image_raw")
 
 image_topic = ["/", image_topic_]
 info_topic = ["/camera_info"]
+# Tag config now lives first-party (the released apriltag_ros no longer ships the
+# Adlink-fork cfg/tags_36h11_filter.yaml). See ugv_vision/config/tags_36h11.yaml.
 config = os.path.join(
-    get_package_share_directory("apriltag_ros"), "cfg", "tags_36h11_filter.yaml"
+    get_package_share_directory("ugv_vision"), "config", "tags_36h11.yaml"
 )
 
 
@@ -50,7 +54,7 @@ def generate_launch_description():
         package="apriltag_ros",
         plugin="AprilTagNode",
         parameters=[config],
-        remappings=[("/image", image_topic), ("/camera_info", info_topic)],
+        remappings=[("image_rect", image_topic), ("camera_info", info_topic)],
     )
 
     container = ComposableNodeContainer(

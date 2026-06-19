@@ -3,9 +3,9 @@
 # Function to start the container
 enter_container() {
     if find / -name "ugv_jetson" 2>/dev/null | grep -q "ugv_jetson"; then
-        container_name="ugv_jetson_ros_humble"
+        container_name="ugv_jetson_ros_jazzy"
     else
-        container_name="ugv_rpi_ros_humble"
+        container_name="ugv_rpi_ros_jazzy"
     fi
 
     echo "Entering the container..."

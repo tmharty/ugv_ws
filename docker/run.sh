@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# Launch the ugv_ws ROS 2 Humble container with GUI (Gazebo/RViz)
+# Launch the ugv_ws ROS 2 Jazzy container with GUI (RViz)
 #
 # The repo is mounted at /home/ws/ugv_ws so the workspace's hardcoded paths work.
 set -e
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-IMAGE=ugv_humble:latest
-NAME=ugv_humble
+IMAGE=ugv_jazzy:latest
+NAME=ugv_jazzy
 
 # Allow local X11 clients (XWayland on Wayland hosts). Scoped to root, the
 # container's default user; falls back to the broader form if unavailable.

@@ -1,39 +1,39 @@
-# ROS 2 Humble image for the ugv_ws workspace.
+# ROS 2 Jazzy image for the ugv_ws workspace.
 #
-# Build:  docker build -t ugv_humble:latest .
-FROM osrf/ros:humble-desktop-full
+# Build:  docker build -t ugv_jazzy:latest .
+FROM osrf/ros:jazzy-desktop-full
 
 # ---- system + ROS dependencies (full stack, from README + rosdep) ----
+# NOTE: Gazebo Classic (ros-*-gazebo-*) is intentionally absent — it has no Jazzy
+# release. The Gazebo sim (ugv_gazebo) is disabled for now and will be ported to
+# new Gazebo (Harmonic / ros_gz) in a separate follow-up.
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3-pip python3-colcon-argcomplete alsa-utils \
       python3-vcstool python3-rosdep \
       python3-numpy python3-dev \
-      ros-humble-libg2o libsuitesparse-dev \
-      ros-humble-gazebo-* \
-      ros-humble-slam-toolbox \
-      ros-humble-joint-state-publisher ros-humble-joint-state-publisher-gui \
-      ros-humble-nav2-* \
-      ros-humble-rosbridge-* \
-      ros-humble-rqt-* \
-      ros-humble-rtabmap-* \
-      ros-humble-usb-cam \
-      ros-humble-depthai-ros \
-      ros-humble-teleop-twist-joy ros-humble-joy \
+      ros-jazzy-libg2o libsuitesparse-dev \
+      ros-jazzy-slam-toolbox \
+      ros-jazzy-joint-state-publisher ros-jazzy-joint-state-publisher-gui \
+      ros-jazzy-nav2-* \
+      ros-jazzy-rosbridge-* \
+      ros-jazzy-rqt-* \
+      ros-jazzy-rtabmap-* \
+      ros-jazzy-usb-cam \
+      ros-jazzy-depthai-ros \
+      ros-jazzy-apriltag ros-jazzy-apriltag-ros \
+      ros-jazzy-teleop-twist-joy ros-jazzy-joy \
       libceres-dev libgoogle-glog-dev liblua5.3-dev libgflags-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # ---- python dependencies (requirements.txt) ----
-RUN pip3 install --no-cache-dir pyserial flask mediapipe requests
+RUN pip3 install --no-cache-dir --break-system-packages pyserial flask mediapipe requests
 
 # ---- GUI / GPU environment ----
 ENV QT_X11_NO_MITSHM=1
-# Gazebo finds the repo's custom world/robot models once the workspace is built.
-ENV GAZEBO_MODEL_PATH=/home/ws/ugv_ws/install/ugv_gazebo/share/ugv_gazebo/models:/home/ws/ugv_ws/install/ugv_description/share
 
-# ---- convenience: auto-source ROS, the workspace (if built), and Gazebo ----
-RUN echo 'source /opt/ros/humble/setup.bash' >> /root/.bashrc \
- && echo '[ -f /home/ws/ugv_ws/install/setup.bash ] && source /home/ws/ugv_ws/install/setup.bash' >> /root/.bashrc \
- && echo 'source /usr/share/gazebo/setup.sh' >> /root/.bashrc
+# ---- convenience: auto-source ROS and the workspace (if built) ----
+RUN echo 'source /opt/ros/jazzy/setup.bash' >> /root/.bashrc \
+ && echo '[ -f /home/ws/ugv_ws/install/setup.bash ] && source /home/ws/ugv_ws/install/setup.bash' >> /root/.bashrc
 
 WORKDIR /home/ws/ugv_ws

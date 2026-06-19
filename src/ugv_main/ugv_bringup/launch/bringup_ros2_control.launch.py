@@ -6,7 +6,8 @@ ugv_hardware SystemInterface owns the ESP32 UART; diff_drive_controller produces
 wheel odometry on /odom_raw (TF off) which robot_localization fuses with /imu/data
 to publish /odom and the odom->base_footprint transform (same wiring as before).
 
-    cmd_vel (Twist) --> diff_cont --> ugv_hardware --[UART]--> ESP32
+    cmd_vel (Twist) --> twist_stamper --> diff_cont/cmd_vel (TwistStamped) --> diff_cont
+        --> ugv_hardware --[UART]--> ESP32
     ESP32 --[UART]--> ugv_hardware --> joint_states / imu/data_raw / (mag,voltage)
 """
 import os
@@ -46,15 +47,28 @@ def generate_launch_description():
     )
 
     # --- controller_manager ---
-    # Topic remaps keep the existing Twist /cmd_vel contract and feed the EKF on /odom_raw.
+    # On Jazzy diff_drive_controller takes TwistStamped on /diff_cont/cmd_vel; a
+    # twist_stamper (below) feeds it from the plain-Twist /cmd_vel. The other remaps
+    # feed the EKF on /odom_raw and publish raw IMU on /imu/data_raw.
     controller_manager = Node(
         package='controller_manager',
         executable='ros2_control_node',
         parameters=[{'robot_description': robot_description}, controllers_yaml],
         remappings=[
-            ('/diff_cont/cmd_vel_unstamped', '/cmd_vel'),
             ('/diff_cont/odom', '/odom_raw'),
             ('/imu_sensor_broadcaster/imu', '/imu/data_raw'),
+        ],
+        output='screen',
+    )
+
+    # --- cmd_vel Twist -> TwistStamped bridge (Jazzy diff_drive_controller is stamped-only) ---
+    twist_stamper = Node(
+        package='ugv_tools',
+        executable='twist_stamper',
+        parameters=[{'frame_id': 'base_footprint'}],
+        remappings=[
+            ('cmd_vel_in', '/cmd_vel'),
+            ('cmd_vel_out', '/diff_cont/cmd_vel'),
         ],
         output='screen',
     )
@@ -110,6 +124,7 @@ def generate_launch_description():
         serial_device_arg,
         robot_state_publisher,
         controller_manager,
+        twist_stamper,
         jsb_spawner,
         after_jsb,
         imu_complementary_filter,

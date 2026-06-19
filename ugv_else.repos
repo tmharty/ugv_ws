@@ -27,30 +27,15 @@ repositories:
     # maintained first-party in ugv_nav/param/explore_lite.yaml (launched via
     # ugv_nav/launch/explore.launch.py), not from this package's bundled config.
 
-  ugv_else/teb_local_planner:
-    type: git
-    url: https://github.com/rst-tu-dortmund/teb_local_planner.git
-    version: 630a22e88dc9fd45be726a762edbb5b776bef231   # "Humble maintenance (#374)" 2022-09-12
-    # provides both teb_local_planner and teb_msgs (byte-identical to former vendored copy)
+  # teb_local_planner + costmap_converter were removed in the Jazzy upgrade: neither
+  # has a Jazzy release, and the nav2 local planner was switched to the bundled
+  # nav2_mppi_controller (MPPI). See ugv_nav param files and PROVENANCE.md.
 
-  ugv_else/costmap_converter:
-    type: git
-    url: https://github.com/rst-tu-dortmund/costmap_converter.git
-    version: 9565858432664e9cfe0b3556e1809336c4ab06d4   # "0.1.2" 2020-06-22
-    # provides both costmap_converter and costmap_converter_msgs (byte-identical)
-
-  ugv_else/apriltag:
-    type: git
-    url: https://github.com/AprilRobotics/apriltag.git
-    version: 12cf56b93d8f1f95e528246c8000c36881fb43fb   # tag v3.4.2 (matches former vendored apriltag)
-
-  ugv_else/apriltag_ros:
-    type: git
-    url: https://github.com/Adlink-ROS/apriltag_ros.git
-    version: 29418213e36571243d5bad2e583daed9440eaf8c   # foxy-devel, 2022-08-18
-    # provides both apriltag_msgs and apriltag_ros. The UGV-specific composable-node
-    # launch (formerly apriltag_ros/launch/bringup.launch.py, added by Waveshare) now
-    # lives first-party at ugv_vision/launch/apriltag_bringup.launch.py.
+  # apriltag + apriltag_ros are no longer vendored here: both are released for Jazzy
+  # and installed via apt (ros-jazzy-apriltag, ros-jazzy-apriltag-ros) in the
+  # Dockerfile / rosdep. NOTE: the released apriltag_ros (AprilRobotics) differs from
+  # the former Adlink foxy-devel fork; ugv_vision's apriltag launch/consumers were
+  # adapted to the released interface.
 
   ugv_else/ldlidar_stl_ros2:
     type: git

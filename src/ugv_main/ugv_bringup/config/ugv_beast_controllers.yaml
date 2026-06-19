@@ -46,9 +46,11 @@ diff_cont:
     open_loop: false
     position_feedback: true
 
-    # Accept plain geometry_msgs/Twist on /cmd_vel (remapped in the launch file) so
-    # every existing publisher (joy, keyboard, behavior_ctrl, Nav2) works unchanged.
-    use_stamped_vel: false
+    # On Jazzy, diff_drive_controller subscribes to ~/cmd_vel as TwistStamped only
+    # (the Humble `use_stamped_vel` parameter was removed). Existing publishers (joy,
+    # keyboard, behavior_ctrl, Nav2) still emit plain geometry_msgs/Twist on /cmd_vel;
+    # a small twist_stamper node in the bringup launch converts /cmd_vel (Twist) ->
+    # /diff_cont/cmd_vel (TwistStamped) so they all keep working unchanged.
 
     # Covariances for the wheel-odometry message consumed by the EKF.
     pose_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]

@@ -15,8 +15,13 @@ vcs import src < ugv_else.repos
 # does not use; tell colcon to skip it.
 touch src/ugv_else/m-explore-ros2/map_merge/COLCON_IGNORE 2>/dev/null || true
 
+# Remove deps dropped in the Jazzy upgrade (teb_local_planner + costmap_converter ->
+# nav2 MPPI; apriltag + apriltag_ros -> apt) in case a prior import left them behind.
+rm -rf src/ugv_else/teb_local_planner src/ugv_else/costmap_converter \
+       src/ugv_else/apriltag src/ugv_else/apriltag_ros
+
 # 2) Resolve system + ROS dependencies declared in package.xml files.
-rosdep install --from-paths src --ignore-src -y --rosdistro "${ROS_DISTRO:-humble}"
+rosdep install --from-paths src --ignore-src -y --rosdistro "${ROS_DISTRO:-jazzy}"
 
 # 3) Build everything (package.xml dependencies determine build order).
 colcon build --symlink-install

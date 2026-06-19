@@ -1,0 +1,29 @@
+# AprilTag detector config for the released (AprilRobotics / christianrauch)
+# apriltag_ros node — the Jazzy package installed via apt (ros-jazzy-apriltag-ros).
+#
+# This first-party copy replaces the former Adlink-fork cfg that used to ship inside
+# the apriltag_ros package (apriltag_ros/cfg/tags_36h11_filter.yaml), which no longer
+# exists in the released package.
+#
+# The tracked tag is published as the tf frame `dock_frame`; ugv_vision/apriltag_track_1
+# looks up base_footprint -> dock_frame to drive toward it. Adjust `tag.ids` to the
+# physical tag you use. Sizes are edge length in metres (the README tracking demo
+# uses an 0.08 m tag).
+#
+# NOTE: not verifiable in a container build — confirm the frame name, tag id and size
+# against a real camera + printed tag when testing on the robot.
+/**:
+  ros__parameters:
+    image_transport: raw
+    family: 36h11
+    size: 0.08
+    max_hamming: 0
+    detector:
+      threads: 1
+      decimate: 2.0
+      blur: 0.0
+      refine: true
+    tag:
+      ids: [0]
+      frames: [dock_frame]
+      sizes: [0.08]

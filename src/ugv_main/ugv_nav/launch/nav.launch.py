@@ -18,22 +18,23 @@ def get_localplan_config_file(context):
     # Get the package share directory for ugv_nav
     ugv_nav_dir = get_package_share_directory('ugv_nav')
 
-    # Get the paths to the different localplan config files
-    amcl_teb_param_path = os.path.join(ugv_nav_dir, 'param', 'amcl_teb.yaml')
+    # Get the paths to the different localplan config files.
+    # 'mppi' replaces the former 'teb' option (teb_local_planner has no Jazzy release).
+    amcl_mppi_param_path = os.path.join(ugv_nav_dir, 'param', 'amcl_mppi.yaml')
     amcl_dwa_param_path = os.path.join(ugv_nav_dir, 'param', 'amcl_dwa.yaml')
-    emcl_teb_param_path = os.path.join(ugv_nav_dir, 'param', 'emcl_teb.yaml')
+    emcl_mppi_param_path = os.path.join(ugv_nav_dir, 'param', 'emcl_mppi.yaml')
     emcl_dwa_param_path = os.path.join(ugv_nav_dir, 'param', 'emcl_dwa.yaml')
 
     # Create a dictionary to map the localplan and localization configurations to their respective config files
     config_map = {
-        ('amcl', 'teb'): amcl_teb_param_path,
+        ('amcl', 'mppi'): amcl_mppi_param_path,
         ('amcl', 'dwa'): amcl_dwa_param_path,
-        ('emcl', 'teb'): emcl_teb_param_path,
+        ('emcl', 'mppi'): emcl_mppi_param_path,
         ('emcl', 'dwa'): emcl_dwa_param_path
     }
 
     # Return the config file based on the launch configurations
-    return config_map.get((use_localization, use_localplan), amcl_teb_param_path)
+    return config_map.get((use_localization, use_localplan), amcl_mppi_param_path)
 
 # Function to set up the launch description
 def launch_setup(context, *args, **kwargs):
@@ -120,7 +121,7 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     # Return the launch description
     return LaunchDescription([
-        DeclareLaunchArgument('use_localplan', default_value='teb', description='Choose which localplan to use: dwa,teb'),
+        DeclareLaunchArgument('use_localplan', default_value='mppi', description='Choose which localplan to use: dwa,mppi'),
         DeclareLaunchArgument('use_localization', default_value='amcl', description='Choose which use_localization to use: amcl,emcl,slam_toolbox'),
         OpaqueFunction(function=launch_setup)
     ])
