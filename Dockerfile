@@ -4,14 +4,16 @@
 FROM osrf/ros:jazzy-desktop-full
 
 # ---- system + ROS dependencies (full stack, from README + rosdep) ----
-# NOTE: Gazebo Classic (ros-*-gazebo-*) is intentionally absent — it has no Jazzy
-# release. The Gazebo sim (ugv_gazebo) is disabled for now and will be ported to
-# new Gazebo (Harmonic / ros_gz) in a separate follow-up.
+# Gazebo: Jazzy pairs with new Gazebo (Harmonic). ros-jazzy-ros-gz pulls the
+# ros_gz_sim / ros_gz_bridge / ros_gz_image stack; ros-jazzy-gz-ros2-control
+# provides the gz_ros2_control/GazeboSimSystem plugin that lets the sim reuse the
+# real robot's diff_drive_controller. (Gazebo Classic has no Jazzy release.)
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3-pip python3-colcon-argcomplete alsa-utils \
       python3-vcstool python3-rosdep \
       python3-numpy python3-dev \
+      ros-jazzy-ros-gz ros-jazzy-gz-ros2-control \
       ros-jazzy-libg2o libsuitesparse-dev \
       ros-jazzy-slam-toolbox \
       ros-jazzy-joint-state-publisher ros-jazzy-joint-state-publisher-gui \

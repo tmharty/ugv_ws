@@ -3,14 +3,22 @@
   name="ugv_beast"
   xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <!-- ros2_control: real robot by default; use_sim is a future hook (see the macro). -->
+  <!-- ros2_control: real robot by default; use_sim swaps in gz_ros2_control. -->
   <xacro:arg name="use_sim" default="false"/>
   <xacro:arg name="serial_device" default="/dev/ttyAMA0"/>
+  <xacro:arg name="controllers_file"
+             default="$(find ugv_bringup)/config/ugv_beast_controllers.yaml"/>
 
   <xacro:include filename="$(find ugv_description)/urdf/ugv_beast.ros2_control.xacro"/>
   <xacro:ugv_ros2_control name="ugv_beast"
                           use_sim="$(arg use_sim)"
                           serial_device="$(arg serial_device)"/>
+
+  <!-- new-Gazebo sensors + gz_ros2_control system + track friction (sim only). -->
+  <xacro:if value="$(arg use_sim)">
+    <xacro:include filename="$(find ugv_description)/urdf/ugv_beast.gazebo.xacro"/>
+    <xacro:ugv_beast_gazebo controllers_yaml="$(arg controllers_file)"/>
+  </xacro:if>
 
   <link name="base_footprint"></link>
   <link
@@ -77,14 +85,14 @@
         xyz="1.85684800868557E-14 0.015500000552408 7.25114412958305E-16"
         rpy="0 0 0" />
       <mass
-        value="0.0602574557338752" />
+        value="0.207085933743005" />
       <inertia
-        ixx="1.41463499717618E-05"
-        ixy="5.40675906873518E-18"
-        ixz="2.24533090468138E-31"
-        iyy="1.86414633348696E-05"
-        iyz="1.86664834767948E-19"
-        izz="1.41463499717618E-05" />
+        ixx="0.000116541923504163"
+        ixy="0"
+        ixz="0"
+        iyy="0.000170742352371108"
+        iyz="0"
+        izz="0.000116541923504163" />
     </inertial>
     <visual>
       <origin
@@ -100,13 +108,14 @@
           rgba="0.627450980392157 0.627450980392157 0.627450980392157 1" />
       </material>
     </visual>
+    <!-- Sim contact: cylinder (radius = controller wheel_radius) instead of the
+         mesh; the mesh stays as the visual. Axis along the axle (y) via roll=pi/2. -->
     <collision>
       <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+        xyz="0 0.0155 0"
+        rpy="1.5708 0 0" />
       <geometry>
-        <mesh
-          filename="package://ugv_description/meshes/ugv_beast/left_up_wheel_link.stl" />
+        <cylinder radius="0.025" length="0.03"/>
       </geometry>
     </collision>
   </link>
@@ -130,14 +139,14 @@
         xyz="7.2025718722557E-15 0.00599999763555432 3.33066907387547E-16"
         rpy="0 0 0" />
       <mass
-        value="0.00565722297095184" />
+        value="0.207085933743005" />
       <inertia
-        ixx="2.80120931171082E-07"
-        ixy="1.73012571052522E-19"
-        ixz="7.08181663938282E-33"
-        iyy="4.2446851103923E-07"
-        iyz="5.90904673131262E-21"
-        izz="2.80120931171082E-07" />
+        ixx="0.000116541923504163"
+        ixy="0"
+        ixz="0"
+        iyy="0.000170742352371108"
+        iyz="0"
+        izz="0.000116541923504163" />
     </inertial>
     <visual>
       <origin
@@ -155,11 +164,10 @@
     </visual>
     <collision>
       <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+        xyz="0 0.006 0"
+        rpy="1.5708 0 0" />
       <geometry>
-        <mesh
-          filename="package://ugv_description/meshes/ugv_beast/left_down_wheel_link.stl" />
+        <cylinder radius="0.025" length="0.03"/>
       </geometry>
     </collision>
   </link>
@@ -183,14 +191,14 @@
         xyz="1.83603132697385E-14 -0.015500000552408 7.25114412958305E-16"
         rpy="0 0 0" />
       <mass
-        value="0.0602574557338752" />
+        value="0.207085933743005" />
       <inertia
-        ixx="1.41463499717618E-05"
-        ixy="-5.34398065104604E-18"
-        ixz="2.21929095291762E-31"
-        iyy="1.86414633348696E-05"
-        iyz="-1.86664834767948E-19"
-        izz="1.41463499717618E-05" />
+        ixx="0.000116541923504163"
+        ixy="0"
+        ixz="0"
+        iyy="0.000170742352371108"
+        iyz="0"
+        izz="0.000116541923504163" />
     </inertial>
     <visual>
       <origin
@@ -208,11 +216,10 @@
     </visual>
     <collision>
       <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+        xyz="0 -0.0155 0"
+        rpy="1.5708 0 0" />
       <geometry>
-        <mesh
-          filename="package://ugv_description/meshes/ugv_beast/right_up_wheel_link.stl" />
+        <cylinder radius="0.025" length="0.03"/>
       </geometry>
     </collision>
   </link>
@@ -236,14 +243,14 @@
         xyz="7.13318293321663E-15 -0.00599999763555434 3.33066907387547E-16"
         rpy="0 0 0" />
       <mass
-        value="0.00565722297095184" />
+        value="0.207085933743005" />
       <inertia
-        ixx="2.80120931171082E-07"
-        ixy="-1.70986035603665E-19"
-        ixz="6.99903667727259E-33"
-        iyy="4.2446851103923E-07"
-        iyz="-5.90904673131262E-21"
-        izz="2.80120931171082E-07" />
+        ixx="0.000116541923504163"
+        ixy="0"
+        ixz="0"
+        iyy="0.000170742352371108"
+        iyz="0"
+        izz="0.000116541923504163" />
     </inertial>
     <visual>
       <origin
@@ -261,11 +268,10 @@
     </visual>
     <collision>
       <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+        xyz="0 -0.006 0"
+        rpy="1.5708 0 0" />
       <geometry>
-        <mesh
-          filename="package://ugv_description/meshes/ugv_beast/right_down_wheel_link.stl" />
+        <cylinder radius="0.025" length="0.03"/>
       </geometry>
     </collision>
   </link>

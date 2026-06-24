@@ -12,8 +12,14 @@
   <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>joint_state_publisher_gui</exec_depend>
   <exec_depend>rviz2</exec_depend>
-  <exec_depend>gazebo_ros</exec_depend>
-  <exec_depend>gazebo_plugins</exec_depend>
+  <!-- new Gazebo (Harmonic) stack — replaces Classic gazebo_ros/gazebo_plugins -->
+  <exec_depend>ros_gz_sim</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>ros_gz_image</exec_depend>
+  <exec_depend>gz_ros2_control</exec_depend>
+  <exec_depend>ugv_description</exec_depend>
+  <exec_depend>ugv_bringup</exec_depend>
+  <exec_depend>ugv_tools</exec_depend>
   <export>
     <architecture_independent />
     <build_type>ament_cmake</build_type>

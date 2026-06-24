@@ -1,0 +1,61 @@
+# ros_gz_bridge topic map for the UGV beast sim.
+#
+# NOT bridged: the IMU and the wheel command/state — gz_ros2_control reads the gz
+# IMU sensor ("imu_sensor") directly and exposes it via imu_sensor_broadcaster, and
+# it owns the wheel joints through diff_drive_controller. Only gz-native sensor
+# streams and the clock need bridging.
+#
+# gz sensor topics follow the <topic> set in ugv_beast.gazebo.xacro:
+#   lidar  -> scan
+#   rgbd   -> camera/image, camera/depth_image, camera/points, camera/camera_info
+#   pt cam -> pt_camera/image, pt_camera/camera_info
+
+- ros_topic_name: "/clock"
+  gz_topic_name: "/clock"
+  ros_type_name: "rosgraph_msgs/msg/Clock"
+  gz_type_name: "gz.msgs.Clock"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/scan"
+  gz_topic_name: "scan"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "gz.msgs.LaserScan"
+  direction: GZ_TO_ROS
+
+# --- front RGBD camera ---
+- ros_topic_name: "/camera/image_raw"
+  gz_topic_name: "camera/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/depth/image_raw"
+  gz_topic_name: "camera/depth_image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/points"
+  gz_topic_name: "camera/points"
+  ros_type_name: "sensor_msgs/msg/PointCloud2"
+  gz_type_name: "gz.msgs.PointCloudPacked"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/camera_info"
+  gz_topic_name: "camera/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+# --- pan-tilt RGB camera ---
+- ros_topic_name: "/pt_camera/image_raw"
+  gz_topic_name: "pt_camera/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/pt_camera/camera_info"
+  gz_topic_name: "pt_camera/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS

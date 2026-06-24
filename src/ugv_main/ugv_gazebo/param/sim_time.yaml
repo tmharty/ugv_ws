@@ -1,0 +1,8 @@
+# Forces use_sim_time:=true on the in-sim controller_manager and every controller
+# it spawns. Passed as a SECOND <parameters> file to gz_ros2_control (after the
+# shared ugv_beast_controllers.yaml, which pins use_sim_time:false for hardware).
+# The /** wildcard applies to all node names (controller_manager, diff_cont,
+# joint_state_broadcaster, imu_sensor_broadcaster).
+/**:
+  ros__parameters:
+    use_sim_time: true

@@ -5,11 +5,11 @@
     ros2_control system block for the UGV beast.
 
     Real robot  -> ugv_hardware/UgvSystemHardware (owns the ESP32 UART).
-    use_sim=true -> gazebo_ros2_control GazeboSystem. This branch is a FUTURE HOOK:
-    the Gazebo Classic sim still runs on the legacy planar_move plugin today, and true
-    sim parity is deferred to the Jazzy / new-Gazebo upgrade. Keeping the branch here
-    means the upgrade only has to swap this one <plugin> (the controller YAML and the
-    interface declarations below carry over unchanged).
+    use_sim=true -> gz_ros2_control GazeboSimSystem (new Gazebo / Harmonic). The same
+    diff_drive_controller + broadcaster config (ugv_beast_controllers.yaml) and the
+    interface declarations below carry over unchanged between real and sim — only this
+    one <plugin> differs. The gz sensors and the gz_ros2_control system plugin itself
+    are contributed by ugv_beast.gazebo.xacro (also gated on use_sim).
   -->
   <xacro:macro name="ugv_ros2_control"
                params="name use_sim:=false
@@ -21,7 +21,7 @@
 
       <hardware>
         <xacro:if value="${use_sim}">
-          <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+          <plugin>gz_ros2_control/GazeboSimSystem</plugin>
         </xacro:if>
         <xacro:unless value="${use_sim}">
           <plugin>ugv_hardware/UgvSystemHardware</plugin>

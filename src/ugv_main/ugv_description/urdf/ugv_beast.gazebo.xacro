@@ -1,0 +1,173 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    new-Gazebo (Harmonic) additions for the UGV beast, included from
+    ugv_beast.urdf.xacro ONLY when use_sim:=true. Three jobs:
+
+      1. Load gz_ros2_control inside the sim so the SAME controller_manager +
+         diff_drive_controller (ugv_beast_controllers.yaml) that drives the real
+         robot drives the sim — full control-stack parity.
+      2. Re-create the sensors the Classic model.sdf used to provide
+         (lidar / depth camera / pan-tilt camera / IMU) as gz sensors.
+      3. Give the tracks an accurate ground footprint via tuned, anisotropic
+         friction on the driven wheels (see the friction block at the bottom).
+
+    NOTE on URDF->SDF: when this URDF is spawned in gz, sdformat's urdf parser
+    converts <gazebo reference="link"> shortcuts (mu1/mu2/fdir1/kp/kd/maxVel/
+    minDepth) into the SDF <surface> for that link, so the Classic-style tags
+    below work unchanged on new Gazebo.
+  -->
+  <xacro:macro name="ugv_beast_gazebo" params="controllers_yaml">
+
+    <!-- ============================================================= -->
+    <!-- 1. gz_ros2_control system  (loads controller_manager in-sim)  -->
+    <!-- ============================================================= -->
+    <gazebo>
+      <plugin filename="gz_ros2_control-system"
+              name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+        <!-- Shared real/sim controller config. A second params file forces
+             use_sim_time:=true on the in-sim controller_manager and the
+             spawned controllers (the shared yaml pins it false for hardware). -->
+        <parameters>${controllers_yaml}</parameters>
+        <parameters>$(find ugv_gazebo)/param/sim_time.yaml</parameters>
+        <controller_manager_name>controller_manager</controller_manager_name>
+      </plugin>
+    </gazebo>
+
+    <!-- ============================================================= -->
+    <!-- 2. Sensors                                                    -->
+    <!-- ============================================================= -->
+
+    <!-- IMU: read by gz_ros2_control and exposed through imu_sensor_broadcaster
+         (sensor name MUST match the <sensor name="imu_sensor"> in the
+         ros2_control block). Same pipeline as hardware: broadcaster ->
+         /imu/data_raw -> complementary_filter -> /imu/data -> EKF. -->
+    <gazebo reference="base_imu_link">
+      <sensor name="imu_sensor" type="imu">
+        <always_on>true</always_on>
+        <update_rate>50</update_rate>
+        <topic>imu</topic>
+        <imu>
+          <angular_velocity>
+            <x><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev></noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev></noise></z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+    </gazebo>
+
+    <!-- 2D lidar -> gz topic "scan", bridged to /scan (sensor_msgs/LaserScan). -->
+    <gazebo reference="base_lidar_link">
+      <sensor name="hls_lfcd_lds" type="gpu_lidar">
+        <always_on>true</always_on>
+        <visualize>true</visualize>
+        <update_rate>10</update_rate>
+        <topic>scan</topic>
+        <gz_frame_id>base_lidar_link</gz_frame_id>
+        <pose>0 0 0.04 0 0 0</pose>
+        <lidar>
+          <scan>
+            <horizontal>
+              <samples>360</samples>
+              <resolution>1.0</resolution>
+              <min_angle>0.0</min_angle>
+              <max_angle>6.28</max_angle>
+            </horizontal>
+          </scan>
+          <range>
+            <min>0.16</min>
+            <max>3.5</max>
+            <resolution>0.015</resolution>
+          </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.01</stddev>
+          </noise>
+        </lidar>
+      </sensor>
+    </gazebo>
+
+    <!-- Front RGBD camera (RealSense stand-in). gz publishes camera/image,
+         camera/depth_image, camera/points, camera/camera_info; bridged in
+         ros_gz_bridge.yaml for rtabmap. -->
+    <gazebo reference="3d_camera_link">
+      <sensor name="camera" type="rgbd_camera">
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+        <topic>camera</topic>
+        <gz_frame_id>3d_camera_link</gz_frame_id>
+        <camera>
+          <horizontal_fov>1.02974</horizontal_fov>
+          <image>
+            <width>640</width>
+            <height>480</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip><near>0.1</near><far>10.0</far></clip>
+        </camera>
+      </sensor>
+    </gazebo>
+
+    <!-- Pan-tilt RGB camera -> "pt_camera" topic namespace. -->
+    <gazebo reference="pt_camera_link">
+      <sensor name="pt_camera" type="camera">
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+        <topic>pt_camera</topic>
+        <gz_frame_id>pt_camera_link</gz_frame_id>
+        <camera>
+          <horizontal_fov>1.02974</horizontal_fov>
+          <image>
+            <width>640</width>
+            <height>480</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip><near>0.02</near><far>300.0</far></clip>
+          <noise><type>gaussian</type><mean>0.0</mean><stddev>0.007</stddev></noise>
+        </camera>
+      </sensor>
+    </gazebo>
+
+    <!-- ============================================================= -->
+    <!-- 3. Track footprint via friction (the "accurate tracks" core)  -->
+    <!-- ============================================================= -->
+    <!--
+      Each rubber track is approximated by its two driven wheels (cylinder
+      collisions, see ugv_beast.urdf.xacro) carrying an anisotropic friction
+      surface:
+        mu1  = longitudinal (rolling/travel) friction  -> straight-line traction
+        mu2  = lateral friction                         -> resists the sideways
+                                                           slip that defines how a
+                                                           tracked robot skid-steers
+        fdir1 = 1 0 0  -> direction of mu1 = the wheel's forward (x) axis
+      TUNING: this is the primary knob for "accurate tracks". Start ~isotropic
+      (mu1=mu2=1.0) which turns reliably; raise mu2 toward track-like grip until
+      the sim's straight-line speed and turn-in-place yaw rate match the real
+      robot (see the verification notes). kp/kd/maxVel/minDepth keep the small,
+      stiff wheel contacts from jittering.
+    -->
+    <xacro:macro name="track_wheel_friction" params="link">
+      <gazebo reference="${link}">
+        <mu1>1.0</mu1>
+        <mu2>1.0</mu2>
+        <fdir1>1 0 0</fdir1>
+        <kp>1e6</kp>
+        <kd>1.0</kd>
+        <maxVel>0.1</maxVel>
+        <minDepth>0.001</minDepth>
+      </gazebo>
+    </xacro:macro>
+    <xacro:track_wheel_friction link="left_up_wheel_link"/>
+    <xacro:track_wheel_friction link="left_down_wheel_link"/>
+    <xacro:track_wheel_friction link="right_up_wheel_link"/>
+    <xacro:track_wheel_friction link="right_down_wheel_link"/>
+
+  </xacro:macro>
+</robot>
