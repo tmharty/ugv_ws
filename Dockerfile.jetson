@@ -1,0 +1,39 @@
+# ROS 2 Humble image for running the ugv_ws AUTONOMY stack on a Jetson (ARM64, headless).
+# Gazebo + RViz run on a remote desktop; this image does NOT install Gazebo at all. The
+# Gazebo Classic ROS wrapper packages (gazebo_ros / gazebo_plugins / gazebo-ros-pkgs) were
+# never published for arm64 on the Humble buildfarm, AND the Jetson never runs Gazebo, so
+# they are neither available nor needed here. The ugv_gazebo *package* still builds without
+# them (its CMakeLists only install()s launch/world/model files — no find_package(gazebo_ros));
+# the two gazebo exec-deps are runtime-only and used solely by bringup.launch.py, which runs
+# on the desktop. The build step (§7) passes --skip-keys to tell rosdep to ignore them.
+#
+# Build:  docker build -f Dockerfile.jetson -t ugv_jetson:latest .
+FROM ros:humble-ros-base
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3-pip python3-colcon-argcomplete \
+      python3-vcstool python3-rosdep \
+      python3-numpy python3-dev \
+      ros-humble-libg2o libsuitesparse-dev \
+      ros-humble-slam-toolbox \
+      ros-humble-robot-localization \
+      ros-humble-imu-complementary-filter \
+      ros-humble-joint-state-publisher ros-humble-joint-state-publisher-gui \
+      ros-humble-nav2-* \
+      ros-humble-rosbridge-* \
+      ros-humble-rtabmap-* \
+      ros-humble-teleop-twist-joy ros-humble-joy \
+      libceres-dev libgoogle-glog-dev liblua5.3-dev libgflags-dev \
+      alsa-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Lightweight Python deps. (mediapipe/usb-cam/depthai are only for on-robot vision and have
+# spotty ARM64 wheels — skip them for the sim; add later if you run real cameras on the Jetson.)
+RUN pip3 install --no-cache-dir pyserial flask requests
+
+# Auto-source ROS + the workspace overlay (once built) for every interactive shell.
+RUN echo 'source /opt/ros/humble/setup.bash' >> /root/.bashrc \
+ && echo '[ -f /home/ws/ugv_ws/install/setup.bash ] && source /home/ws/ugv_ws/install/setup.bash' >> /root/.bashrc
+
+WORKDIR /home/ws/ugv_ws
