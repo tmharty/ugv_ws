@@ -87,6 +87,21 @@ def generate_launch_description():
         'log_level', default_value='info',
         description='log level')
     
+    # Rewrite the simulated lidar's +inf no-return beams to a finite value so
+    # slam_toolbox clears the free space they passed through (Gazebo emits inf;
+    # karto skips inf beams, so the SLAM /map and explore_lite frontiers never
+    # clear). Publishes /scan_filtered, which slam_toolbox consumes. The Nav2
+    # costmaps keep using the raw /scan (they handle inf via inf_is_valid).
+    scan_filter_node = Node(
+        package='laser_filters',
+        executable='scan_to_scan_filter_chain',
+        name='scan_to_scan_filter_chain',
+        parameters=[
+            os.path.join(bringup_dir, 'param', 'scan_range_filter.yaml'),
+            {'use_sim_time': use_sim_time},
+        ],
+        output='screen')
+
     rviz_config_dir = os.path.join(nav2_dir,'rviz','nav2_default_view.rviz')
 
     rviz_node =  Node(
@@ -159,6 +174,7 @@ def generate_launch_description():
     ld.add_action(declare_log_level_cmd)
 
     # Add the actions to launch all of the navigation nodes
+    ld.add_action(scan_filter_node)
     ld.add_action(bringup_cmd_group)
     ld.add_action(rviz_node)
     return ld

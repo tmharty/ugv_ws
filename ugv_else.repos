@@ -21,7 +21,14 @@ repositories:
   ugv_else/m-explore-ros2:
     type: git
     url: https://github.com/robo-friends/m-explore-ros2.git
-    version: e40e857b6af6e64f82514efdcd2cb9844ea77dc4   # explore_lite source verbatim; 2023-03-22
+    version: 326cf8a0b487c34246bb8f3326afbcd69576dc60   # origin/main HEAD; 2026-06-01 (#51)
+    # Bumped 2026-06-25 from e40e857 (2023-03-22) for the #48 "Fix the marker positions"
+    # fix: the chosen-frontier RViz sphere was drawn at frontier.initial instead of
+    # frontier.centroid (the cell the robot is actually sent to), so it looked misplaced.
+    # NOTE: the goal coordinate math (explore/src/frontier_search.cpp) is byte-identical
+    # to e40e857 -- this bump fixes visualization, not goal selection. This pin also adds
+    # a new in-repo explore_lite_msgs package (a single ExploreStatus message), which the
+    # build picks up automatically (only map_merge is COLCON_IGNORE'd).
     # NOTE: this repo also contains map_merge, which ugv_ws does not use. The build
     # scripts drop a COLCON_IGNORE into it after import. The explore_lite params are
     # maintained first-party in ugv_nav/param/explore_lite.yaml (launched via

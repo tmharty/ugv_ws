@@ -11,7 +11,7 @@ slam_toolbox:
     odom_frame: odom
     map_frame: map
     base_frame: base_footprint
-    scan_topic: /scan
+    scan_topic: /scan_filtered  # inf-rewritten scan (see param/scan_range_filter.yaml)
     mode: mapping #localization mapping
 
     # if you'd like to start localizing on bringup in a map and pose
@@ -23,8 +23,11 @@ slam_toolbox:
     transform_publish_period: 0.02 #if 0 never publishes odometry
     map_update_interval: 5.0
     resolution: 0.05
-    min_laser_range: 0.0 #for rastering images
-    max_laser_range: 20.0 #for rastering images
+    min_laser_range: 0.16 #match simulated HLDS lidar (model.sdf range 0.16-3.5m)
+    # rangeThreshold < maxRange(=scan.range_max=3.5) opens karto's "clear free
+    # without marking" band [3.4, 3.5); the filter's 3.45 inf-replacement lands
+    # in it so no-return beams clear free space. See param/scan_range_filter.yaml.
+    max_laser_range: 3.4
     minimum_time_interval: 0.5
     transform_timeout: 0.2
     tf_buffer_duration: 30.
@@ -235,9 +238,10 @@ local_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          raytrace_max_range: 3.0
+          inf_is_valid: true
+          raytrace_max_range: 3.5
           raytrace_min_range: 0.0
-          obstacle_max_range: 2.5
+          obstacle_max_range: 3.0
           obstacle_min_range: 0.0        
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
@@ -267,9 +271,10 @@ global_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          raytrace_max_range: 3.0
+          inf_is_valid: true
+          raytrace_max_range: 3.5
           raytrace_min_range: 0.0
-          obstacle_max_range: 2.5
+          obstacle_max_range: 3.0
           obstacle_min_range: 0.0
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"

@@ -1,0 +1,26 @@
+# laser_filters chain that rewrites the simulated HLDS lidar scan before SLAM.
+#
+# Gazebo's ray sensor reports +inf for beams that hit nothing within range_max
+# (3.5 m). slam_toolbox/karto SKIPS any reading >= maxRange (Karto.h AddScan),
+# so those no-return beams never clear the free space they passed through, and
+# explore_lite frontiers (built from the SLAM /map) never resolve.
+#
+# This replaces inf / >=range_max readings with 3.45 m. Combined with
+# slam_toolbox max_laser_range: 3.4 (rangeThreshold < maxRange=3.5), karto then
+# traces those beams as FREE up to 3.4 m with no phantom obstacle (the
+# "trace up to range reading" branch of AddScan). Readings below the sensor
+# minimum become NaN, which karto also skips.
+#
+# The Nav2 costmaps keep consuming the raw /scan (they handle inf via
+# inf_is_valid: true), so only SLAM gets the rewritten /scan_filtered.
+scan_to_scan_filter_chain:
+  ros__parameters:
+    filter1:
+      name: range
+      type: laser_filters/LaserScanRangeFilter
+      params:
+        use_message_range_limits: false
+        lower_threshold: 0.16          # HLDS minimum range
+        upper_threshold: 3.5           # HLDS maximum range (== scan.range_max)
+        lower_replacement_value: .nan  # too-close readings -> NaN -> skipped by karto
+        upper_replacement_value: 3.45  # inf / out-of-range -> finite, lands in [3.4, 3.5)
