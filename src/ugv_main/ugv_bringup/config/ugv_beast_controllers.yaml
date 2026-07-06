@@ -50,6 +50,11 @@ diff_cont:
     # every existing publisher (joy, keyboard, behavior_ctrl, Nav2) works unchanged.
     use_stamped_vel: false
 
+    # Watchdog: stop the wheels if no /cmd_vel arrives for this long. This is the
+    # controller-level backstop under every higher-level motion path (teleop,
+    # behavior_ctrl, Nav2, voice)
+    cmd_vel_timeout: 0.5
+
     # Covariances for the wheel-odometry message consumed by the EKF.
     pose_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
     twist_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
