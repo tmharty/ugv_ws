@@ -21,6 +21,8 @@ class ChatAi(Node):
     def __init__(self):
         super().__init__('chat_ai')
         self._action_client = ActionClient(self, Behavior, 'behavior')
+        self.declare_parameter('ollama_url', 'http://localhost:11434')
+        self.declare_parameter('ollama_model', 'gemma2')
 
     def publish_behavior(self, message):
         msg = String()
@@ -80,11 +82,13 @@ def generate(messages):
     i = 0
 
     try:
-        data = {"stream": True, "model": 'gemma2', "messages": messages}
+        ollama_url = ros_node.get_parameter('ollama_url').value
+        ollama_model = ros_node.get_parameter('ollama_model').value
+        data = {"stream": True, "model": ollama_model, "messages": messages}
         response = requests.post(
-            "http://192.168.10.185:11434/api/chat", 
-            headers={"Content-Type": "application/json"}, 
-            json=data, 
+            f"{ollama_url.rstrip('/')}/api/chat",
+            headers={"Content-Type": "application/json"},
+            json=data,
             stream=True
         )
         response.raise_for_status()
@@ -139,7 +143,7 @@ def main(args=None):
     ros_thread = threading.Thread(target=ros_spin, args=(ros_node,))
     ros_thread.start()
 
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)
 
     ros_node.destroy_node()
     rclpy.shutdown()
