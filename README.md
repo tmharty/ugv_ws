@@ -625,10 +625,15 @@ Enter docker and start ssh to remotely access docker and the visual interface
     
     Drive the car first, refer to the above chassis drive, map construction and navigation, and start mapping and navigation at the same time.
     
-    - ugv web
+    > ⚠️ The web UI (vizanti + rosbridge) exposes an **unauthenticated** WebSocket
+    > with full ROS-graph access — including `/cmd_vel` — to anyone on the LAN.
+    > It is deliberately not part of any bringup launch: start it only while you
+    > are actively using it, and stop it (Ctrl-C) when done.
+    
+    - ugv web (on demand only)
         
         ```jsx
-        ros2 launch ugv_web_app bringup.launch.py host:=ip
+        ros2 launch ugv_web_app bringup.launch.py
         ```
         
 - Command interaction
@@ -970,11 +975,11 @@ Enter docker and start ssh to remotely access docker and the visual interface
             ros2 run ugv_chat_ai app
             ```
             
-    - Web control
+    - Web control (on demand only — unauthenticated `/cmd_vel` access, see the warning in the Web side control section above; stop it when done)
         - ugv web
             
             ```jsx
-            ros2 launch ugv_web_app bringup.launch.py host:=ip
+            ros2 launch ugv_web_app bringup.launch.py
             ```
             
     - Command interaction
