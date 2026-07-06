@@ -45,6 +45,13 @@ def generate_launch_description():
         executable='ugv_driver',
     )
 
+    # Low-battery alarm
+    battery_alarm_node = Node(
+        package='ugv_bringup',
+        executable='battery_alarm',
+        output='screen',
+    )
+
     # Include laser lidar launch file
     laser_bringup_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -74,6 +81,7 @@ def generate_launch_description():
         robot_state_launch,
         bringup_node,
         driver_node,
+        battery_alarm_node,
         laser_bringup_launch,
         rf2o_laser_odometry_launch,
         base_node

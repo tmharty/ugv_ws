@@ -5,9 +5,7 @@ from geometry_msgs.msg import Twist
 import serial  
 import json  
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Float32, Float32MultiArray
-import subprocess
-import time
+from std_msgs.msg import Float32MultiArray
 import os
 
 def is_jetson():
@@ -34,9 +32,6 @@ class UgvDriver(Node):
 
         # Subscribe to LED control data (ugv/led_ctrl topic)
         self.led_ctrl_sub = self.create_subscription(Float32MultiArray, 'ugv/led_ctrl', self.led_ctrl_callback, 10)
-
-        # Subscribe to voltage data (voltage topic)
-        self.voltage_sub = self.create_subscription(Float32, 'voltage', self.voltage_callback, 10)
 
     # Callback for processing velocity commands
     def cmd_vel_callback(self, msg):
@@ -98,15 +93,6 @@ class UgvDriver(Node):
         }) + "\n"
                 
         ser.write(led_ctrl_data.encode())
-
-    # Callback for processing voltage data
-    def voltage_callback(self, msg):
-        voltage_value = msg.data
-
-        # If voltage drops below a threshold, play a low battery warning sound
-        if 0.1 < voltage_value < 9: 
-            subprocess.run(['aplay', '-D', 'plughw:3,0', '/home/ws/ugv_ws/src/ugv_main/ugv_bringup/ugv_bringup/low_battery.wav'])
-            time.sleep(5)
 
 def main(args=None):
     rclpy.init(args=args)

@@ -74,6 +74,12 @@ def generate_launch_description():
         package='ugv_bringup',
         executable='ugv_driver',
     )
+    # Low-battery alarm
+    battery_alarm_node = Node(
+        package='ugv_bringup',
+        executable='battery_alarm',
+        output='screen',
+    )
     # Define the base node with parameters
     base_node = Node(
         package='ugv_base_node',
@@ -92,6 +98,7 @@ def generate_launch_description():
         #imu_filter_node,
         laser_bringup_launch,
         driver_node,
+        battery_alarm_node,
         base_node
     ])
 
