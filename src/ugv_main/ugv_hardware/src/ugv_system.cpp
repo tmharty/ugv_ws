@@ -26,6 +26,14 @@ constexpr double kEncoderToMetres = 1.0 / 100.0;           // firmware sends met
 constexpr double kVoltageScale = 1.0 / 100.0;              // firmware sends volts * 100
 constexpr double kRadToDeg = 180.0 / M_PI;
 
+// Monotonic timestamp in nanoseconds; used for serial-link staleness, so it must
+// be steady (immune to wall-clock/system-time jumps), not rclcpp::Time.
+int64_t steady_now_ns()
+{
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
 // Extract a numeric value for `key` from a flat JSON line ({"a":1,"b":2.0,...}).
 // Tolerant of whitespace; telemetry values are unquoted numbers.
 bool extract_number(const std::string & line, const char * key, double & out)
@@ -184,6 +192,7 @@ hardware_interface::CallbackReturn UgvSystemHardware::on_init(
   };
   serial_device_ = get_param("serial_device", "/dev/ttyAMA0");
   baud_ = std::stoi(get_param("baud", "115200"));
+  serial_timeout_ = std::stod(get_param("serial_timeout", "0.5"));
   wheel_radius_ = std::stod(get_param("wheel_radius", "0.025"));
   wheel_separation_ = std::stod(get_param("wheel_separation", "0.175"));
   left_wheel_joints_ = split_csv(get_param("left_wheel_names", ""));
@@ -269,6 +278,10 @@ hardware_interface::CallbackReturn UgvSystemHardware::on_activate(
 {
   running_ = true;
   first_read_ = true;
+  // Seed the staleness clock so the first serial_timeout_ seconds after activation
+  // are a grace window while the ESP32 stream spins up.
+  write_failed_ = false;
+  last_telem_ns_ = steady_now_ns();
   reader_thread_ = std::thread(&UgvSystemHardware::reader_loop, this);
   writer_thread_ = std::thread(&UgvSystemHardware::writer_loop, this);
 
@@ -341,12 +354,26 @@ std::vector<hardware_interface::CommandInterface> UgvSystemHardware::export_comm
 hardware_interface::return_type UgvSystemHardware::read(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
+  // Fault propagation: if the telemetry stream has been silent for longer than
+  // serial_timeout_, the link is dead (cable pulled, board hung, fd revoked).
+  // Return ERROR so the controller_manager deactivates the controllers instead
+  // of silently coasting forever on the last-known encoder/IMU values.
+  const double stale_s = (steady_now_ns() - last_telem_ns_.load()) * 1e-9;
+  if (stale_s > serial_timeout_) {
+    RCLCPP_ERROR_THROTTLE(
+      rclcpp::get_logger("UgvSystemHardware"), steady_clock_, 1000,
+      "Serial telemetry stale for %.2f s (> %.2f s) - deactivating", stale_s,
+      serial_timeout_);
+    return hardware_interface::return_type::ERROR;
+  }
+
   Telemetry t;
   {
     std::lock_guard<std::mutex> lock(telem_mutex_);
     t = telem_;
   }
   if (!t.valid) {
+    // Within the startup grace window; no frame decoded yet.
     return hardware_interface::return_type::OK;
   }
 
@@ -396,6 +423,16 @@ hardware_interface::return_type UgvSystemHardware::read(
 hardware_interface::return_type UgvSystemHardware::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
+  // Fault propagation: writer_loop sets write_failed_ when ::write hits a dead
+  // fd, meaning commands are no longer reaching the firmware. Surface it as
+  // ERROR rather than pretending the twist was delivered.
+  if (write_failed_.load()) {
+    RCLCPP_ERROR_THROTTLE(
+      rclcpp::get_logger("UgvSystemHardware"), steady_clock_, 1000,
+      "Serial write failing (dead fd) - deactivating");
+    return hardware_interface::return_type::ERROR;
+  }
+
   // Average the per-side wheel velocity setpoints (rad/s) the diff_drive
   // controller produced, then invert the differential-drive kinematics to
   // recover the body twist the ESP32 firmware expects.
@@ -469,6 +506,8 @@ void UgvSystemHardware::reader_loop()
       std::lock_guard<std::mutex> lock(telem_mutex_);
       telem_ = t;
     }
+    // Mark the link as alive for read()'s staleness check.
+    last_telem_ns_.store(steady_now_ns());
   }
 }
 
@@ -485,7 +524,12 @@ void UgvSystemHardware::writer_loop()
       line = std::move(write_queue_.front());
       write_queue_.pop_front();
     }
-    serial_.write_str(line);
+    // A negative return means a dead/closed fd (ENXIO/EIO) — the command never
+    // reached the firmware. Latch it so write() can report the fault; cleared on
+    // the next on_activate.
+    if (serial_.write_str(line) < 0) {
+      write_failed_.store(true);
+    }
   }
 }
 

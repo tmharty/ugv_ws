@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -94,6 +95,15 @@ private:
   std::thread writer_thread_;
   std::atomic<bool> running_{false};
 
+  // Link-liveness tracking so a dead serial link propagates to ros2_control.
+  // last_telem_ns_: steady_clock nanoseconds of the last decoded T:1001 frame
+  // (seeded at on_activate to grant a startup grace window). write_failed_: set
+  // by writer_loop when ::write reports a dead fd. Both are polled by
+  // read()/write(), which return ERROR so the controller_manager deactivates.
+  std::atomic<int64_t> last_telem_ns_{0};
+  std::atomic<bool> write_failed_{false};
+  rclcpp::Clock steady_clock_{RCL_STEADY_TIME};  // for throttled fault logging
+
   std::mutex telem_mutex_;
   Telemetry telem_;
 
@@ -114,6 +124,7 @@ private:
   // ---- parameters (from the <hardware> block, with sane defaults) ----
   std::string serial_device_;
   int baud_{115200};
+  double serial_timeout_{0.5};        // seconds without telemetry -> link dead
   double wheel_radius_{0.025};       // metres  (wheel diameter 0.05)
   double wheel_separation_{0.175};   // metres
   std::vector<std::string> left_wheel_joints_;
