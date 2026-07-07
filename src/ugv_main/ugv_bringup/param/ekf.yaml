@@ -135,6 +135,33 @@ ekf_filter_node:
         odom0_pose_rejection_threshold: 20.0
         odom0_twist_rejection_threshold: 1.542
 
+# rf2o laser scan-match odometry (launched by bringup_ros2_control). Tracks slip against
+# the ground under load and in-place turns, which corrupts wheel odometry; scan matching
+# measures motion against the world, so it is immune to slip. Fused as velocities only
+# (vx, vyaw): rf2o's pose drifts like any odometry, and fusing a second absolute pose
+# against odom0's would make the filter jump between the two. The legacy bringup paths do
+# not launch rf2o; robot_localization simply never receives odom1 there, which is harmless.
+        odom1: /odom_rf2o
+        odom1_config: [false, false, false,
+                       false, false, false,
+                       true,  false, false,
+                       false, false, true,
+                       false, false, false]
+
+        #        [x_pos   , y_pos    , z_pos,
+        #         roll    , pitch    , yaw,
+        #         x_vel   , y_vel    , z_vel,
+        #         roll_vel, pitch_vel, yaw_vel,
+        #         x_accel , y_accel  , z_accel]
+
+        odom1_queue_size: 10
+        odom1_nodelay: false
+        odom1_differential: false
+        odom1_relative: false
+# Reject scan-match glitches (feature-poor views, aggressive motion) rather than let a
+# bad match yank the velocity estimate.
+        odom1_twist_rejection_threshold: 1.0
+
         imu0: /imu/data
         imu0_config: [false, false, false,
                       false, false, true ,

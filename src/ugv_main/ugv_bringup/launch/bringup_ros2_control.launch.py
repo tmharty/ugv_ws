@@ -4,7 +4,8 @@
 Replaces the legacy ugv_driver + ugv_bringup + base_node_ekf path. The
 ugv_hardware SystemInterface owns the ESP32 UART; diff_drive_controller produces
 wheel odometry on /odom_raw (TF off) which robot_localization fuses with /imu/data
-to publish /odom and the odom->base_footprint transform (same wiring as before).
+and rf2o laser odometry to publish /odom and the sole
+odom->base_footprint transform.
 
     cmd_vel (Twist) --> diff_cont --> ugv_hardware --[UART]--> ESP32
     ESP32 --[UART]--> ugv_hardware --> joint_states / imu/data_raw / (mag,voltage)
@@ -103,6 +104,11 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(get_package_share_directory('ugv_bringup'), 'launch', 'ldlidar', 'ldlidar.launch.py')))
 
+    # --- laser scan-match odometry (slip-immune odom source, fused by the EKF) ---
+    rf2o_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory('rf2o_laser_odometry'), 'launch', 'rf2o_laser_odometry.launch.py')))
+
     # --- low-battery alarm (moved out of ugv_driver) ---
     battery_alarm = Node(package='ugv_bringup', executable='battery_alarm', output='screen')
 
@@ -115,5 +121,6 @@ def generate_launch_description():
         imu_complementary_filter,
         ekf_node,
         lidar_launch,
+        rf2o_launch,
         battery_alarm,
     ])

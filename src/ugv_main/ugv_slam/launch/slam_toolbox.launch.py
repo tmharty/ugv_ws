@@ -2,6 +2,7 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 import os
 from launch.actions import IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 from launch.actions import DeclareLaunchArgument
@@ -21,14 +22,14 @@ def generate_launch_description():
     slam_params = os.path.join(
         get_package_share_directory('ugv_slam'), 'config', 'slam_toolbox_mapping.yaml')
 
-    # Include launch description for bringing up the lidar
-    bringup_lidar_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
-        [os.path.join(get_package_share_directory('ugv_bringup'), 'launch'),
-         '/bringup_lidar.launch.py']),
-        launch_arguments={
-            'use_rviz': LaunchConfiguration('use_rviz'),
-            'rviz_config': 'slam_2d',
-        }.items()
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        output='screen',
+        arguments=['-d', os.path.join(
+            get_package_share_directory('ugv_slam'), 'rviz', 'view_slam_2d.rviz')],
+        condition=IfCondition(LaunchConfiguration('use_rviz'))
     )
 
     # Include launch description for robot pose publisher
@@ -53,7 +54,7 @@ def generate_launch_description():
     return LaunchDescription([
         use_rviz_arg,
         use_sim_time_arg,
-        bringup_lidar_launch,
+        rviz_node,
         robot_pose_publisher_launch,
         slam_toolbox_node
     ])

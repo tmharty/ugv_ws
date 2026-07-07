@@ -52,14 +52,15 @@ def launch_setup(context, *args, **kwargs):
     # Get the map yaml path
     map_yaml_path = LaunchConfiguration('map', default=os.path.join(ugv_nav_dir, 'maps', 'map.yaml'))
     # Get the emcl param file
-    emcl_param_file = os.path.join(emcl_dir, 'config', 'emcl2_quick_start.param.yaml')                        
-    # Include the bringup_lidar launch description
-    bringup_lidar_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(get_package_share_directory('ugv_bringup'), 'launch', 'bringup_lidar.launch.py')),
-        launch_arguments={
-            'use_rviz': LaunchConfiguration('use_rviz'),
-            'rviz_config': 'nav_2d', 
-        }.items()
+    emcl_param_file = os.path.join(emcl_dir, 'config', 'emcl2_quick_start.param.yaml')
+
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        output='screen',
+        arguments=['-d', os.path.join(ugv_nav_dir, 'rviz', 'view_nav_2d.rviz')],
+        condition=IfCondition(LaunchConfiguration('use_rviz'))
     )
 
     # Include the nav2_bringup_amcl launch description if use_localization is amcl
@@ -108,7 +109,7 @@ def launch_setup(context, *args, **kwargs):
     
     # Return the list of launch descriptions
     return [
-        bringup_lidar_launch,
+        rviz_node,
         nav2_bringup_amcl_launch,
         nav2_bringup_emcl_launch,
         emcl_launch,
@@ -122,6 +123,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_localplan', default_value='teb', description='Choose which localplan to use: dwa,teb'),
         DeclareLaunchArgument('use_localization', default_value='amcl', description='Choose which use_localization to use: amcl,emcl,slam_toolbox'),
+        DeclareLaunchArgument('use_rviz', default_value='false', description='Whether to launch RViz2'),
         OpaqueFunction(function=launch_setup)
     ])
 

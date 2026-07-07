@@ -86,15 +86,20 @@ def generate_launch_description():
     declare_log_level_cmd = DeclareLaunchArgument(
         'log_level', default_value='info',
         description='log level')
-    
-    bringup_lidar_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(get_package_share_directory('ugv_bringup'), 'launch', 'bringup_lidar.launch.py')),
-        launch_arguments={
-            'use_rviz': LaunchConfiguration('use_rviz'),
-            'rviz_config': 'nav_2d',  
-        }.items()
+
+    declare_use_rviz_cmd = DeclareLaunchArgument(
+        'use_rviz', default_value='false',
+        description='Whether to launch RViz2')
+
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        output='screen',
+        arguments=['-d', os.path.join(bringup_dir, 'rviz', 'view_nav_2d.rviz')],
+        condition=IfCondition(LaunchConfiguration('use_rviz'))
     )
-    
+
     robot_pose_publisher_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
         [os.path.join(get_package_share_directory('robot_pose_publisher'), 'launch'),
          '/robot_pose_publisher_launch.py'])
@@ -151,9 +156,10 @@ def generate_launch_description():
     ld.add_action(declare_use_composition_cmd)
     ld.add_action(declare_use_respawn_cmd)
     ld.add_action(declare_log_level_cmd)
+    ld.add_action(declare_use_rviz_cmd)
 
     # Add the actions to launch all of the navigation nodes
-    ld.add_action(bringup_lidar_launch)
+    ld.add_action(rviz_node)
     ld.add_action(robot_pose_publisher_launch)
     ld.add_action(bringup_cmd_group)
     return ld

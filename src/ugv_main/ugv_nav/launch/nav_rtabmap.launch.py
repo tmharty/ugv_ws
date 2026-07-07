@@ -55,18 +55,17 @@ def launch_setup(context, *args, **kwargs):
     
     # Declare the use_rviz launch argument
     use_rviz_arg = DeclareLaunchArgument('use_rviz', default_value='false',
-                                     description='Whether to launch RViz2')  
+                                     description='Whether to launch RViz2')
 
-    # Include the bringup lidar launch description
-    bringup_lidar_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
-        [os.path.join(get_package_share_directory('ugv_bringup'), 'launch'),
-         '/bringup_lidar.launch.py']),
-        launch_arguments={
-            'use_rviz': LaunchConfiguration('use_rviz'),
-            'rviz_config': 'nav_3d',
-        }.items()
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        output='screen',
+        arguments=['-d', os.path.join(ugv_nav_dir, 'rviz', 'view_nav_3d.rviz')],
+        condition=IfCondition(LaunchConfiguration('use_rviz'))
     )
-                                         
+
     # Include the robot pose publisher launch description
     robot_pose_publisher_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
         [os.path.join(get_package_share_directory('robot_pose_publisher'), 'launch'),
@@ -76,7 +75,7 @@ def launch_setup(context, *args, **kwargs):
     # Return the launch actions
     return [
         use_rviz_arg,
-        bringup_lidar_launch,
+        rviz_node,
         robot_pose_publisher_launch,
         nav2_bringup_launch
     ]
