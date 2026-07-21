@@ -7,29 +7,46 @@ import getpass
 import threading
 from time import sleep
 
+import glob
+
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Int32, Bool
-import pygame
+
+# pygame is only used to read the controller's *name*; the actual joystick input
+# arrives on the /joy topic from joy_node. In a headless container pygame may be
+# missing or unable to enumerate joysticks (SDL needs udev), so treat it as
+# optional and fall back to sysfs below.
+try:
+    import pygame
+except ImportError:
+    pygame = None
 
 def get_joystick_names():
-    pygame.init()
-    pygame.joystick.init()
-
     joystick_names = []
-    joystick_count = pygame.joystick.get_count()
-    
-    if joystick_count == 0:
-        print("no")
-    else:
-        for i in range(joystick_count):
+
+    # Preferred path: SDL/pygame (works on a desktop with a udev session).
+    if pygame is not None:
+        pygame.init()
+        pygame.joystick.init()
+        for i in range(pygame.joystick.get_count()):
             joystick = pygame.joystick.Joystick(i)
             joystick.init()
             joystick_names.append(joystick.get_name())
+        pygame.quit()
 
-    pygame.quit()
+    # Fallback: headless containers often can't enumerate joysticks via SDL/udev,
+    # so read the kernel-reported name straight from sysfs (e.g. /dev/input/js0).
+    if not joystick_names:
+        for path in sorted(glob.glob('/sys/class/input/js*/device/name')):
+            try:
+                with open(path) as fh:
+                    joystick_names.append(fh.read().strip())
+            except OSError:
+                pass
+
     return joystick_names
     
 class JoyTeleop(Node):
@@ -58,6 +75,7 @@ class JoyTeleop(Node):
 		self.joysticks = joysticks[0] if len(joysticks) != 0 else "no"
 		self.switch_dict = {
 			"Xbox 360 Controller": [9,10,3],
+			"Microsoft X-Box 360 pad": [9,10,3],   # xpad kernel name; same layout as Xbox 360 Controller
 			"SHANWAN Android Gamepad": [13,14,2],
 		}
 
