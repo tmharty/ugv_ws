@@ -15,10 +15,14 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 def generate_launch_description():
                                    
-    # Create a node to read joystick input
+    # Create a node to read joystick input.
+    # We use joy_linux (reads /dev/input/js0 directly via the Linux joystick API)
+    # instead of the default SDL-based 'joy' joy_node, because SDL cannot enumerate
+    # joysticks inside the headless Jetson container (no working udev/SDL session).
     joy_node = Node(
-        package='joy',
-        executable='joy_node',
+        package='joy_linux',
+        executable='joy_linux_node',
+        parameters=[{'dev': '/dev/input/js0'}],
     )
 
     # Create a node to control the robot using joystick input

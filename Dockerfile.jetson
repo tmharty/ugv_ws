@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-humble-nav2-* \
       ros-humble-rosbridge-* \
       ros-humble-rtabmap-* \
-      ros-humble-teleop-twist-joy ros-humble-joy \
+      ros-humble-teleop-twist-joy ros-humble-joy ros-humble-joy-linux \
       libceres-dev libgoogle-glog-dev liblua5.3-dev libgflags-dev \
       alsa-utils \
     && rm -rf /var/lib/apt/lists/*
