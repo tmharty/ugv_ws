@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Lightweight Python deps. (mediapipe/usb-cam/depthai are only for on-robot vision and have
 # spotty ARM64 wheels — skip them for the sim; add later if you run real cameras on the Jetson.)
-RUN pip3 install --no-cache-dir pyserial flask requests
+RUN pip3 install --no-cache-dir pyserial flask requests pygame
 
 # Auto-source ROS + the workspace overlay (once built) for every interactive shell.
 RUN echo 'source /opt/ros/humble/setup.bash' >> /root/.bashrc \

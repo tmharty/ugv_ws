@@ -13,11 +13,12 @@ COMMON_ARGS=(
   --network host                                # DDS discovery + web UI over the LAN
 
   # --- real-robot devices: commented out for the Gazebo test (Gazebo supplies these). ---
-  # --device /dev/ttyTHS1                        # ESP32 UART (Jetson)   -> ugv_hardware
-  # --device /dev/ttyACM0                        # LDLiDAR USB
-  # --device /dev/video0                         # USB pan/tilt camera
-  # -v /dev/bus/usb:/dev/bus/usb                 # OAK-D (depthai)
-  # -v /dev/input:/dev/input                     # gamepad
+  --device /dev/ttyTHS1                          # ESP32 UART (Jetson)   -> ugv_hardware
+  --device /dev/ttyACM0                          # LDLiDAR USB
+  --device /dev/video0                           # USB pan/tilt camera
+  -v /dev/bus/usb:/dev/bus/usb                   # OAK-D (depthai)
+  -v /dev/input:/dev/input                       # gamepad
+  -v /run/udev:/run/udev:ro                      # SDL2 (joy_node + pygame) enumerates joysticks via udev
   # --runtime nvidia                             # only if you need CUDA in-container
 )
 
