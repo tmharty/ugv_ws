@@ -17,7 +17,8 @@ COMMON_ARGS=(
   --device /dev/ttyACM0                          # LDLiDAR USB
   --device /dev/video0                           # USB pan/tilt camera
   -v /dev/bus/usb:/dev/bus/usb                   # OAK-D (depthai)
-  -v /dev/input:/dev/input                       # gamepad
+  -v /dev/input:/dev/input                       # gamepad: expose the device nodes...
+  "--device-cgroup-rule=c 13:* rwm"              # ...AND allow opening them (a bind mount alone is blocked by the device cgroup)
   -v /run/udev:/run/udev:ro                      # SDL2 (joy_node + pygame) enumerates joysticks via udev
   # --runtime nvidia                             # only if you need CUDA in-container
 )
