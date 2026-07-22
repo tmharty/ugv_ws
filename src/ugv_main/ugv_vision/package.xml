@@ -19,6 +19,8 @@
   <exec_depend>apriltag</exec_depend>
   <exec_depend>apriltag_ros</exec_depend>
   <exec_depend>apriltag_msgs</exec_depend>
+  <exec_depend>usb_cam</exec_depend>
+  <exec_depend>image_proc</exec_depend>
   <export>
     <build_type>ament_python</build_type>
   </export>

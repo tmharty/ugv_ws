@@ -22,7 +22,7 @@ def generate_launch_description():
     joy_node = Node(
         package='joy_linux',
         executable='joy_linux_node',
-        parameters=[{'dev': '/dev/input/js0'}],
+        parameters=[{'dev': '/dev/input/js0', 'deadzone': 0.1}],
     )
 
     # Create a node to control the robot using joystick input
