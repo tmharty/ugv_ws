@@ -25,10 +25,13 @@ def generate_launch_description():
         parameters=[{'dev': '/dev/input/js0', 'deadzone': 0.1}],
     )
 
-    # Create a node to control the robot using joystick input
+    # Create a node to control the robot using joystick input.
+    # angular_speed_limit raised from the node's 1.0 default so the robot turns
+    # at a usable rate at full stick (1.0 rad/s felt like it barely rotated).
     joy_ctrl_node = Node(
         package='ugv_tools',
         executable='joy_ctrl',
+        parameters=[{'angular_speed_limit': 3.0}],
     )
 
     # Return the launch description
