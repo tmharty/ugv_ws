@@ -194,7 +194,8 @@ class JoyTeleop(Node):
 		# Gimbal + LED handling shared by both the jetson and pc drive paths.
 		c = self.cfg
 		# D-pad -> gimbal input (-1/0/1). Flip a sign here if a direction feels reversed.
-		self.pan_input  = joy.axes[c["pan_axis"]]  if c["pan_axis"]  < len(joy.axes) else 0.0
+		# turns the camera right, so the raw value would mirror the stick.
+		self.pan_input  = -joy.axes[c["pan_axis"]] if c["pan_axis"]  < len(joy.axes) else 0.0
 		self.tilt_input = joy.axes[c["tilt_axis"]] if c["tilt_axis"] < len(joy.axes) else 0.0
 		# Re-center the gimbal
 		if self.rising_edge(joy.buttons, c["recenter"]):
