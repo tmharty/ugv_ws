@@ -1,5 +1,6 @@
 #include "ugv_hardware/ugv_system.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -197,6 +198,8 @@ hardware_interface::CallbackReturn UgvSystemHardware::on_init(
   wheel_separation_ = std::stod(get_param("wheel_separation", "0.175"));
   left_wheel_joints_ = split_csv(get_param("left_wheel_names", ""));
   right_wheel_joints_ = split_csv(get_param("right_wheel_names", ""));
+  gyro_calibration_ = get_param("gyro_calibration", "true") != "false";
+  gyro_cal_samples_ = std::stoi(get_param("gyro_calibration_samples", "200"));
 
   // ---- build the interface tables, mirroring the URDF ros2_control block ----
   std::vector<double> state_init;
@@ -278,6 +281,12 @@ hardware_interface::CallbackReturn UgvSystemHardware::on_activate(
 {
   running_ = true;
   first_read_ = true;
+  // Re-run gyro ZRO calibration on every activation (robot assumed stationary).
+  gyro_calibrated_ = false;
+  gyro_cal_count_ = 0;
+  gyro_bias_x_ = gyro_bias_y_ = gyro_bias_z_ = 0.0;
+  gyro_cal_sum_x_ = gyro_cal_sum_y_ = gyro_cal_sum_z_ = 0.0;
+  gyro_cal_sq_z_ = 0.0;
   // Seed the staleness clock so the first serial_timeout_ seconds after activation
   // are a grace window while the ESP32 stream spins up.
   write_failed_ = false;
@@ -405,9 +414,48 @@ hardware_interface::return_type UgvSystemHardware::read(
   auto set_if = [&](const std::string & key, double val) {
     if (has_state(key)) {state_ref(key) = val;}
   };
-  set_if("imu_sensor/angular_velocity.x", t.gx * kGyroScale);
-  set_if("imu_sensor/angular_velocity.y", t.gy * kGyroScale);
-  set_if("imu_sensor/angular_velocity.z", t.gz * kGyroScale);
+
+  // Gyro zero-rate-offset calibration. While the window is filling (robot held
+  // still), accumulate the raw counts and publish zero angular velocity so nothing
+  // downstream integrates the bias. Once enough samples are in, latch the mean as
+  // the bias and subtract it from here on.
+  if (gyro_calibration_ && !gyro_calibrated_) {
+    gyro_cal_sum_x_ += t.gx;
+    gyro_cal_sum_y_ += t.gy;
+    gyro_cal_sum_z_ += t.gz;
+    gyro_cal_sq_z_ += t.gz * t.gz;
+    if (++gyro_cal_count_ >= gyro_cal_samples_) {
+      const double n = static_cast<double>(gyro_cal_count_);
+      gyro_bias_x_ = gyro_cal_sum_x_ / n;
+      gyro_bias_y_ = gyro_cal_sum_y_ / n;
+      gyro_bias_z_ = gyro_cal_sum_z_ / n;
+      // Movement sanity check: if z was not steady during the window, the robot was
+      // probably moving and the bias is untrustworthy. Warn but still apply it.
+      const double var_z = std::max(0.0, gyro_cal_sq_z_ / n - gyro_bias_z_ * gyro_bias_z_);
+      const double std_z_radps = std::sqrt(var_z) * kGyroScale;
+      gyro_calibrated_ = true;
+      if (std_z_radps > 0.05) {
+        RCLCPP_WARN(
+          rclcpp::get_logger("UgvSystemHardware"),
+          "Gyro calibration: z std %.4f rad/s over %d samples is high - was the "
+          "robot moving? Bias may be off (z bias %.4f rad/s).",
+          std_z_radps, gyro_cal_count_, gyro_bias_z_ * kGyroScale);
+      } else {
+        RCLCPP_INFO(
+          rclcpp::get_logger("UgvSystemHardware"),
+          "Gyro calibrated over %d samples: bias (%.4f, %.4f, %.4f) rad/s.",
+          gyro_cal_count_, gyro_bias_x_ * kGyroScale, gyro_bias_y_ * kGyroScale,
+          gyro_bias_z_ * kGyroScale);
+      }
+    }
+    set_if("imu_sensor/angular_velocity.x", 0.0);
+    set_if("imu_sensor/angular_velocity.y", 0.0);
+    set_if("imu_sensor/angular_velocity.z", 0.0);
+  } else {
+    set_if("imu_sensor/angular_velocity.x", (t.gx - gyro_bias_x_) * kGyroScale);
+    set_if("imu_sensor/angular_velocity.y", (t.gy - gyro_bias_y_) * kGyroScale);
+    set_if("imu_sensor/angular_velocity.z", (t.gz - gyro_bias_z_) * kGyroScale);
+  }
   set_if("imu_sensor/linear_acceleration.x", t.ax * kAccelScale);
   set_if("imu_sensor/linear_acceleration.y", t.ay * kAccelScale);
   set_if("imu_sensor/linear_acceleration.z", t.az * kAccelScale);

@@ -130,6 +130,25 @@ private:
   std::vector<std::string> left_wheel_joints_;
   std::vector<std::string> right_wheel_joints_;
 
+  // ---- gyro zero-rate-offset (ZRO) calibration ----
+  // The ESP32 gyro has a small constant bias (~0.02 rad/s on z). Left uncorrected
+  // it integrates into an endless slow yaw drift in the EKF, since the downstream
+  // complementary filter only de-biases orientation, not the angular_velocity we
+  // publish. On activation we average a window of samples while the robot is held
+  // still, then subtract the mean from every reading. The robot MUST be stationary
+  // for gyro_cal_samples_ reads (~4 s at the 50 Hz control rate) after bringup.
+  bool gyro_calibration_{true};       // <hardware> param: enable ZRO calibration
+  int gyro_cal_samples_{200};         // <hardware> param: samples to average
+  bool gyro_calibrated_{false};       // true once the bias has been captured
+  int gyro_cal_count_{0};             // samples accumulated so far
+  double gyro_bias_x_{0.0};           // measured bias (raw counts), subtracted pre-scale
+  double gyro_bias_y_{0.0};
+  double gyro_bias_z_{0.0};
+  double gyro_cal_sum_x_{0.0};        // running sums during the calibration window
+  double gyro_cal_sum_y_{0.0};
+  double gyro_cal_sum_z_{0.0};
+  double gyro_cal_sq_z_{0.0};         // sum of squares of z, for a movement sanity check
+
   // ---- bookkeeping for velocity estimation from cumulative encoder travel ----
   bool first_read_{true};
   double prev_left_pos_{0.0};

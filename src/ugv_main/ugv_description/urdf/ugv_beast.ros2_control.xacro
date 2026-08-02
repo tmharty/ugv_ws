@@ -31,6 +31,11 @@
           <param name="wheel_separation">${wheel_separation}</param>
           <param name="left_wheel_names">left_up_wheel_link_joint,left_down_wheel_link_joint</param>
           <param name="right_wheel_names">right_up_wheel_link_joint,right_down_wheel_link_joint</param>
+          <!-- Gyro zero-rate-offset calibration: average this many samples at
+               activation (robot MUST be stationary) and subtract the bias. Set
+               gyro_calibration to false to disable. ~200 samples ~= 4 s at 50 Hz. -->
+          <param name="gyro_calibration">true</param>
+          <param name="gyro_calibration_samples">200</param>
         </xacro:unless>
       </hardware>
 
