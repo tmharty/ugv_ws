@@ -21,6 +21,7 @@ def get_localplan_config_file(context):
     # Get the paths to the different localplan config files
     amcl_teb_param_path = os.path.join(ugv_nav_dir, 'param', 'amcl_teb.yaml')
     amcl_dwa_param_path = os.path.join(ugv_nav_dir, 'param', 'amcl_dwa.yaml')
+    amcl_rpp_param_path = os.path.join(ugv_nav_dir, 'param', 'amcl_rpp.yaml')
     emcl_teb_param_path = os.path.join(ugv_nav_dir, 'param', 'emcl_teb.yaml')
     emcl_dwa_param_path = os.path.join(ugv_nav_dir, 'param', 'emcl_dwa.yaml')
 
@@ -28,6 +29,7 @@ def get_localplan_config_file(context):
     config_map = {
         ('amcl', 'teb'): amcl_teb_param_path,
         ('amcl', 'dwa'): amcl_dwa_param_path,
+        ('amcl', 'rpp'): amcl_rpp_param_path,
         ('emcl', 'teb'): emcl_teb_param_path,
         ('emcl', 'dwa'): emcl_dwa_param_path
     }
@@ -121,7 +123,7 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     # Return the launch description
     return LaunchDescription([
-        DeclareLaunchArgument('use_localplan', default_value='teb', description='Choose which localplan to use: dwa,teb'),
+        DeclareLaunchArgument('use_localplan', default_value='teb', description='Choose which localplan to use: dwa,teb,rpp (rpp requires use_localization:=amcl)'),
         DeclareLaunchArgument('use_localization', default_value='amcl', description='Choose which use_localization to use: amcl,emcl,slam_toolbox'),
         DeclareLaunchArgument('use_rviz', default_value='false', description='Whether to launch RViz2'),
         OpaqueFunction(function=launch_setup)
