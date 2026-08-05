@@ -19,6 +19,9 @@ touch src/ugv_else/m-explore-ros2/map_merge/COLCON_IGNORE 2>/dev/null || true
 rosdep install --from-paths src --ignore-src -y --rosdistro "${ROS_DISTRO:-humble}"
 
 # 3) Build everything (package.xml dependencies determine build order).
-colcon build --symlink-install
+# Release is required: without CMAKE_BUILD_TYPE the C++ packages (rf2o laser
+# odometry, ugv_hardware, the lidar driver, ...) compile unoptimized and burn
+# several times the CPU at runtime.
+colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 source install/setup.bash
