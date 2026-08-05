@@ -4,5 +4,16 @@
       i_enable_imu: false
       i_enable_ir: false
       i_nn_type: none
+    rgb:
+      # Driver defaults are 1080p @ 30 fps; every frame is then rectified on
+      # the Jetson CPU while rtabmap only consumes ~1/s. Downscale on the
+      # camera's ISP (1920x1080 * 2/3 = 1280x720) and halve the frame rate.
+      i_fps: 15.0
+      i_isp_num: 2
+      i_isp_den: 3
+    left:
+      i_fps: 15.0
+    right:
+      i_fps: 15.0
     stereo:
       i_subpixel: true

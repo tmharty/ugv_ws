@@ -46,7 +46,10 @@ def generate_launch_description():
             'subscribe_scan': True,
             "subscribe_odom_info": False,
             "approx_sync": True,
-            "Rtabmap/DetectionRate": "3.5",
+            # 1 Hz keyframes (the rtabmap default). Higher rates bloat the pose
+            # graph, which slows loop closure more and more as the map grows —
+            # too heavy for the Jetson Orin Nano at this robot's driving speed.
+            "Rtabmap/DetectionRate": "1.0",
      }
 
     remappings = [

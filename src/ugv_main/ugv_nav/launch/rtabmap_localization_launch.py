@@ -24,7 +24,9 @@ def generate_launch_description():
             'subscribe_scan': True,
             "subscribe_odom_info": False,
             "approx_sync": True,
-            "Rtabmap/DetectionRate": "3.5",
+            # 1 Hz relocalization updates (the rtabmap default), matching the
+            # mapping launch — 3.5 Hz was too heavy for the Jetson Orin Nano.
+            "Rtabmap/DetectionRate": "1.0",
      }
 
     remappings = [
