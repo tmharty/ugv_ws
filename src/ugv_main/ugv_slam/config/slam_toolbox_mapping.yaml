@@ -20,22 +20,22 @@ slam_toolbox:
     # General params
     debug_logging: false
     throttle_scans: 1
-    transform_publish_period: 0.02     # publishes map->odom at 50 Hz
-    map_update_interval: 1.0
+    transform_publish_period: 0.05     # publishes map->odom at 20 Hz (upstream default)
+    map_update_interval: 5.0           # occupancy grid rebuild; 1.0 was too heavy for the Jetson
     resolution: 0.05
-    min_laser_range: 0.1               # cartographer min_range 0.1
+    min_laser_range: 0.1
     max_laser_range: 3.5               # cartographer max_range 3.5
-    minimum_time_interval: 0.2
+    minimum_time_interval: 0.5         # upstream default; 0.2 was too heavy for the Jetson
     transform_timeout: 0.2             # cartographer lookup_transform_timeout 0.2
     tf_buffer_duration: 30.0
     stack_size_to_use: 40000000
-    enable_interactive_mode: true
+    enable_interactive_mode: false     # keeps every scan image in RAM when true
 
     # Matcher / loop closure (cartographer used online correlative scan matching)
     use_scan_matching: true
     use_scan_barycenter: true
-    minimum_travel_distance: 0.2
-    minimum_travel_heading: 0.2
+    minimum_travel_distance: 0.5       # upstream default; 0.2 processed ~2.5x the
+    minimum_travel_heading: 0.5        # scans for little map-quality gain on the Jetson
     scan_buffer_size: 10
     scan_buffer_maximum_scan_distance: 10.0
     link_match_minimum_response_fine: 0.1

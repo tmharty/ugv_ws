@@ -109,12 +109,11 @@ def generate_launch_description():
         condition=UnlessCondition(LaunchConfiguration('use_rviz'))
     )
 
-    # Launch the robot pose publisher launch file
-    robot_pose_publisher_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
-        [os.path.join(get_package_share_directory('robot_pose_publisher'), 'launch'),
-         '/robot_pose_publisher_launch.py'])
-    ) 
-                     
+    # robot_pose_publisher is intentionally NOT started here: the nav launches
+    # already start it, and /robot_pose is only consumed by behavior_ctrl's
+    # point-goal features, which need Nav2 running anyway. Starting it here too
+    # produced a duplicate identically-named node when SLAM and nav ran together.
+
     return LaunchDescription([
         declare_use_sim_time,
         declare_queue_size,
@@ -123,7 +122,6 @@ def generate_launch_description():
         declare_use_rviz,
         rviz_node,
         bringup_oak_lite_launch,
-        robot_pose_publisher_launch,
         rtabmap_slam_node_slam,
         rtabmap_slam_node_localization,
         rtabmap_viz_node

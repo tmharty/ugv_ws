@@ -9,10 +9,10 @@ def generate_launch_description():
             output="screen",
             emulate_tty=True,
             parameters=[
-                {"use_sim_time": True},
+                {"use_sim_time": False},
                 {"is_stamped": True},
                 {"map_frame": "map"},
-                {"base_frame": "base_link"}
+                {"base_frame": "base_footprint"}
             ]
         )
     ])

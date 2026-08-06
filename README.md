@@ -32,7 +32,7 @@
         vcs import src < ugv_else.repos
         touch src/ugv_else/m-explore-ros2/map_merge/COLCON_IGNORE 2>/dev/null || true
         rosdep install --from-paths src --ignore-src -y --rosdistro humble
-        colcon build --symlink-install
+        colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
         echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
         echo 'eval "$(register-python-argcomplete ros2)"' >> ~/.bashrc
         echo 'eval "$(register-python-argcomplete colcon)"' >> ~/.bashrc
@@ -54,7 +54,7 @@
         vcs import src < ugv_else.repos
         touch src/ugv_else/m-explore-ros2/map_merge/COLCON_IGNORE 2>/dev/null || true
         rosdep install --from-paths src --ignore-src -y --rosdistro humble
-        colcon build --symlink-install
+        colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
         source install/setup.bash 
         ```
         

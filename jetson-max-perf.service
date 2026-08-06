@@ -1,0 +1,21 @@
+# Pins the Jetson Orin clocks to max on every boot. jetson_clocks does NOT
+# persist across reboots (the nvpmodel power mode does), so without this you
+# must remember to re-run it before every mapping/nav session.
+#
+# Install once, on the Jetson HOST (not in the container), from the repo root:
+#   sudo nvpmodel -m 0     # MAXN SUPER; this part persists on its own
+#   sudo cp jetson-max-perf.service /etc/systemd/system/
+#   sudo systemctl enable --now jetson-max-perf.service
+[Unit]
+Description=Pin Jetson clocks to max for the UGV stack (jetson_clocks)
+# jetson_clocks locks clocks within the active nvpmodel power mode, so make
+# sure it runs after the boot-time nvpmodel service.
+After=nvpmodel.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/jetson_clocks
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -29,9 +29,9 @@ maintainer can rebase the deltas or upstream them.
 
 | Package | Closest upstream | Local modifications to preserve |
 |---|---|---|
-| `rf2o_laser_odometry` | [MAPIRlab/rf2o_laser_odometry](https://github.com/MAPIRlab/rf2o_laser_odometry) (ros2) | Adds an IMU passthrough (`imu_topic` param + `sensor_msgs/Imu` publisher) and **negates the odom x/y position** (`-1.0 * translation`). Behavioural — do not drop. |
+| `rf2o_laser_odometry` | [MAPIRlab/rf2o_laser_odometry](https://github.com/MAPIRlab/rf2o_laser_odometry) (ros2) | Adds an IMU passthrough (`imu_topic` param + `sensor_msgs/Imu` publisher) and **negates the odom x/y position** (`-1.0 * translation`). Behavioural — do not drop. Launch `freq` lowered 20→10 Hz first-party (2026-08, Jetson CPU). |
 | `vizanti` (`vizanti`, `vizanti_cpp`, `vizanti_demos`, `vizanti_msgs`, `vizanti_server`) | [MoffKalast/vizanti](https://github.com/MoffKalast/vizanti) (ros2) | Modified `vizanti_cpp` (e.g. `tf_consolidator.cpp`) and an added `param_manager.cpp`; demo launch/scripts renamed. |
-| `robot_pose_publisher` | [MilanMichael/robot_pose_publisher_ros2](https://github.com/MilanMichael/robot_pose_publisher_ros2) | Renamed package; default `base_frame` `base_link`→`base_footprint`; extra `tf2_ros/transform_listener.h` include; launch `is_stamped: True`. |
+| `robot_pose_publisher` | [MilanMichael/robot_pose_publisher_ros2](https://github.com/MilanMichael/robot_pose_publisher_ros2) | Renamed package; default `base_frame` `base_link`→`base_footprint`; extra `tf2_ros/transform_listener.h` include; launch `is_stamped: True`. Launch fixed first-party (2026-08): `use_sim_time` True→False (real-robot launches use this file; sim defines its own node) and `base_frame` → `base_footprint`. |
 
 ## Removed earlier (not dependencies anymore)
 

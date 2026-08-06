@@ -123,7 +123,9 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     # Return the launch description
     return LaunchDescription([
-        DeclareLaunchArgument('use_localplan', default_value='teb', description='Choose which localplan to use: dwa,teb,rpp (rpp requires use_localization:=amcl)'),
+        # rpp (Regulated Pure Pursuit) is the default: teb starves the 20 Hz control
+        # loop on the Jetson (see the note in param/amcl_rpp.yaml).
+        DeclareLaunchArgument('use_localplan', default_value='rpp', description='Choose which localplan to use: dwa,teb,rpp (rpp requires use_localization:=amcl)'),
         DeclareLaunchArgument('use_localization', default_value='amcl', description='Choose which use_localization to use: amcl,emcl,slam_toolbox'),
         DeclareLaunchArgument('use_rviz', default_value='false', description='Whether to launch RViz2'),
         OpaqueFunction(function=launch_setup)

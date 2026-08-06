@@ -32,12 +32,6 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('use_rviz'))
     )
 
-    # Include launch description for robot pose publisher
-    robot_pose_publisher_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
-        [os.path.join(get_package_share_directory('robot_pose_publisher'), 'launch'),
-         '/robot_pose_publisher_launch.py'])
-    )
-
     # slam_toolbox online async mapping node
     slam_toolbox_node = Node(
         package='slam_toolbox',
@@ -55,6 +49,5 @@ def generate_launch_description():
         use_rviz_arg,
         use_sim_time_arg,
         rviz_node,
-        robot_pose_publisher_launch,
         slam_toolbox_node
     ])
