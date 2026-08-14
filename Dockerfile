@@ -26,6 +26,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ---- python dependencies (requirements.txt) ----
 RUN pip3 install --no-cache-dir pyserial flask mediapipe requests
 
+# ---- voice stack (voice_control_plan.md Phase 0): audio I/O + placeholder TTS ----
+# Separate layer so adding these didn't invalidate the big apt layer above.
+# robot-localization (EKF, used by bringup_ros2_control) was previously only
+# hand-installed inside the persistent container — baked in here.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libportaudio2 portaudio19-dev espeak-ng \
+      ros-humble-robot-localization \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip3 install --no-cache-dir sounddevice
+
 # ---- GUI / GPU environment ----
 ENV QT_X11_NO_MITSHM=1
 # Gazebo finds the repo's custom world/robot models once the workspace is built.

@@ -16,7 +16,7 @@ xhost +SI:localuser:root >/dev/null 2>&1 || xhost +local: >/dev/null 2>&1 || tru
 # Grant the in-container root the host's video/render GIDs so it can use
 # /dev/dri (AMD radeonsi) for hardware-accelerated OpenGL.
 GRP_ARGS=()
-for g in video render; do
+for g in video render audio; do
   gid="$(getent group "$g" | cut -d: -f3)"
   [ -n "$gid" ] && GRP_ARGS+=(--group-add "$gid")
 done
@@ -28,6 +28,7 @@ COMMON_ARGS=(
   -e ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"        # MUST match the desktop (see §6)
   -v /tmp/.X11-unix:/tmp/.X11-unix:rw
   --device /dev/dri                           # AMD GPU acceleration
+  --device /dev/snd                           # ALSA audio (voice dev loop)
   -v /dev/input:/dev/input                    # game controller (hotplug-friendly)
   -v "$REPO":/home/ws/ugv_ws                  # repo at the hardcoded path
   --network host                              # simplest for ROS DDS + web UI

@@ -34,6 +34,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # spotty ARM64 wheels — skip them for the sim; add later if you run real cameras on the Jetson.)
 RUN pip3 install --no-cache-dir pyserial flask requests pygame
 
+# ---- voice stack (voice_control_plan.md Phase 0): audio I/O + placeholder TTS ----
+# Separate layer so adding these didn't invalidate the big apt layer above.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libportaudio2 portaudio19-dev espeak-ng \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip3 install --no-cache-dir sounddevice
+
 # Auto-source ROS + the workspace overlay (once built) for every interactive shell.
 RUN echo 'source /opt/ros/humble/setup.bash' >> /root/.bashrc \
  && echo '[ -f /home/ws/ugv_ws/install/setup.bash ] && source /home/ws/ugv_ws/install/setup.bash' >> /root/.bashrc

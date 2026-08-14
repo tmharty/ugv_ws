@@ -16,6 +16,7 @@ COMMON_ARGS=(
   --device /dev/ttyTHS1                          # ESP32 UART (Jetson)   -> ugv_hardware
   --device /dev/ttyACM0                          # LDLiDAR USB
   --device /dev/video0                           # USB pan/tilt camera
+  --device /dev/snd                              # ALSA: camera mic (in) + audio board speakers (out)
   -v /dev/bus/usb:/dev/bus/usb                   # OAK-D (depthai)
   -v /dev/input:/dev/input                       # gamepad: expose the device nodes...
   "--device-cgroup-rule=c 13:* rwm"              # ...AND allow opening them (a bind mount alone is blocked by the device cgroup)
