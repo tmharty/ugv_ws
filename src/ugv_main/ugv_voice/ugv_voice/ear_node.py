@@ -14,6 +14,7 @@ been rebuilt yet.
 """
 
 import math
+import os
 import threading
 
 import rclpy
@@ -86,13 +87,15 @@ class EarNode(Node):
     def _worker_loop(self):
         wake_enabled = bool(self.get_parameter('wake_word_enabled').value)
         while rclpy.ok():
-            if wake_enabled:
-                if not self._wait_for_wake_word():
-                    continue
-            else:
-                if not self._listen_requested.wait(timeout=0.5):
-                    continue
+            # Everything in the cycle is guarded: an exception (bad device,
+            # broken wake stack, model load failure) must never kill this
+            # thread — the ear just logs and keeps listening.
             try:
+                if wake_enabled:
+                    if not self._wait_for_wake_word():
+                        continue
+                elif not self._listen_requested.wait(timeout=0.5):
+                    continue
                 audio = self._record_utterance()
                 if audio is not None:
                     self._transcribe_and_publish(audio)
@@ -171,7 +174,11 @@ class EarNode(Node):
                 'faster-whisper not installed — rebuild the image with the '
                 'Phase 1 voice deps; publishing empty transcript')
             return None
-        self._asr = WhisperModel(model_name, device='cpu', compute_type='int8',
+        # Prefer the directory scripts/fetch_voice_models.sh populates, so the
+        # robot works offline; fall back to a by-name Hugging Face download.
+        local_dir = os.path.join(models_dir, f'faster-whisper-{model_name}')
+        model_ref = local_dir if os.path.isdir(local_dir) else model_name
+        self._asr = WhisperModel(model_ref, device='cpu', compute_type='int8',
                                  download_root=models_dir)
         self._asr_label = f'faster-whisper-{model_name}-int8'
         self.get_logger().info(f'loaded ASR: {self._asr_label}')
@@ -216,6 +223,31 @@ class EarNode(Node):
 
     # --- wake word (param-gated; default off until PTT is proven) ---------
 
+    def _resolve_wake_model(self):
+        """Map the wake_word_model param to the local file fetched by
+        scripts/fetch_voice_models.sh, falling back to the bare name (which
+        openwakeword resolves from its own package resources)."""
+        name = str(self.get_parameter('wake_word_model').value)
+        for candidate in (name, f'{name}.onnx', f'{name}_v0.1.onnx'):
+            path = os.path.join(self._oww_dir(), candidate)
+            if os.path.isfile(path):
+                return path
+        return name
+
+    def _oww_dir(self):
+        return os.path.join(str(self.get_parameter('models_dir').value),
+                            'openwakeword')
+
+    def _oww_feature_paths(self):
+        """openwakeword's shared feature models, if fetched locally — without
+        these kwargs it looks in its package resources, which are empty unless
+        openwakeword.utils.download_models() was run."""
+        paths = {'melspec_model_path': 'melspectrogram.onnx',
+                 'embedding_model_path': 'embedding_model.onnx'}
+        resolved = {k: os.path.join(self._oww_dir(), f)
+                    for k, f in paths.items()}
+        return resolved if all(os.path.isfile(p) for p in resolved.values()) else {}
+
     def _wait_for_wake_word(self):
         try:
             import numpy as np
@@ -229,7 +261,9 @@ class EarNode(Node):
 
         if not hasattr(self, '_wake_model'):
             self._wake_model = WakeModel(
-                wakeword_models=[str(self.get_parameter('wake_word_model').value)])
+                wakeword_models=[self._resolve_wake_model()],
+                inference_framework='onnx',
+                **self._oww_feature_paths())
         threshold = float(self.get_parameter('wake_word_threshold').value)
         device = self._resolve_device(sd)
         block = int(self.sample_rate * 0.08)  # openwakeword expects 80 ms frames

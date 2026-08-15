@@ -36,6 +36,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && pip3 install --no-cache-dir sounddevice
 
+# ---- voice stack (voice_control_plan.md Phase 1): wake word + ASR + TTS ----
+# numpy MUST stay <2: unpinned, openwakeword's dependency tree upgrades numpy
+# to 2.x, which breaks the distro scipy and with it the ROS Python stack
+# (verified break + fix 2026-08-15). Models are NOT baked in — fetch them with
+# scripts/fetch_voice_models.sh into the host-mounted models/ directory.
+# pytest 7: faster-whisper drags in anyio, whose pytest plugin needs >=7 while
+# Ubuntu 22.04 ships 6.2.5 — without the upgrade, all `colcon test` collection
+# breaks with "No module named '_pytest.scope'".
+RUN pip3 install --no-cache-dir 'numpy<2' 'pytest>=7,<8' \
+      openwakeword faster-whisper piper-tts onnxruntime
+
 # ---- GUI / GPU environment ----
 ENV QT_X11_NO_MITSHM=1
 # Gazebo finds the repo's custom world/robot models once the workspace is built.

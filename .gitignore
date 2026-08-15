@@ -3,6 +3,9 @@
 /install/
 /log/
 
+# Voice models (fetched via scripts/fetch_voice_models.sh, ~210 MB)
+/models/
+
 # Python
 __pycache__/
 *.pyc
