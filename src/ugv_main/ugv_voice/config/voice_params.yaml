@@ -23,6 +23,22 @@ voice_brain:
     confirm_timeout_s: 15.0
     max_motions_per_minute: 12
 
+# Talk-only LLM conversation (chat.launch.py). No control interfaces —
+# requires the host's Ollama daemon (voice_control_plan.md Phase 3 setup).
+voice_chat:
+  ros__parameters:
+    ollama_url: "http://localhost:11434"  # host daemon; container shares its network
+    ollama_model: "gemma3n:e2b"           # Phase 3 model decision; qwen2.5:3b fallback
+    request_timeout_s: 120.0              # first turn includes model load
+    keep_alive: "10m"                     # auto-unload after 10 min idle
+    temperature: 0.7
+    max_reply_tokens: 120                 # keeps spoken replies short
+    max_history_turns: 12
+    system_prompt: ""                     # "" = built-in honest-machine persona
+    auto_listen: true                     # re-arm the mic after each reply
+    relisten_delay_s: 0.7
+    max_silent_turns: 2                   # empty listens before the session ends
+
 voice_mouth:
   ros__parameters:
     playback_device: "plughw:CARD=Device,DEV=0"

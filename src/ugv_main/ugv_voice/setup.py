@@ -14,6 +14,8 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'config'),
             glob(os.path.join('config', '*.yaml'))),
+        (os.path.join('share', package_name, 'launch'),
+            glob(os.path.join('launch', '*.launch.py'))),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -27,6 +29,7 @@ setup(
             'ear_node = ugv_voice.ear_node:main',
             'brain_node = ugv_voice.brain_node:main',
             'mouth_node = ugv_voice.mouth_node:main',
+            'chat_node = ugv_voice.chat_node:main',
         ],
     },
 )
