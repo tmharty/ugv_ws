@@ -1,0 +1,32 @@
+# Voice stack parameters. Device names are the UGV Beast's verified hardware
+# (2026-08-14): capture = USB camera mic, playback = built-in audio board.
+# ALSA card *names* are stable across boots; indices are not.
+# On the x86 dev machine override both to that machine's devices.
+
+voice_ear:
+  ros__parameters:
+    capture_device: "Camera"          # PortAudio name substring
+    sample_rate: 16000
+    listen_window_s: 6.0
+    silence_after_speech_s: 0.8
+    energy_threshold: 0.015
+    asr_model: "base.en"
+    models_dir: "/home/ws/ugv_ws/models"
+    wake_word_enabled: false          # push-to-talk until PTT is proven
+    wake_word_model: "hey_jarvis"
+    wake_word_threshold: 0.6
+
+voice_brain:
+  ros__parameters:
+    brain_backend: "rules"            # rules | ollama (Phase 3) | bedrock (Phase 4)
+    speak_before_act_s: 1.2           # speak-then-act reaction window
+    confirm_timeout_s: 15.0
+    max_motions_per_minute: 12
+
+voice_mouth:
+  ros__parameters:
+    playback_device: "plughw:CARD=Device,DEV=0"
+    tts_backend: "auto"               # piper once its model is fetched, else espeak-ng
+    piper_model: "/home/ws/ugv_ws/models/piper/en_US-lessac-medium.onnx"
+    espeak_voice: "en-us"
+    espeak_speed: 155
