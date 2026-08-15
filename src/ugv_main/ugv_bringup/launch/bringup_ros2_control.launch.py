@@ -16,6 +16,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription,
                             RegisterEventHandler)
+from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration
@@ -112,8 +113,21 @@ def generate_launch_description():
     # --- low-battery alarm (moved out of ugv_driver) ---
     battery_alarm = Node(package='ugv_bringup', executable='battery_alarm', output='screen')
 
+    # --- voice control (opt-in) ---
+    # Brings up ear/brain/mouth plus behavior_ctrl (the motion seam voice
+    # commands go through — not started anywhere else in bringup).
+    use_voice = LaunchConfiguration('use_voice')
+    use_voice_arg = DeclareLaunchArgument(
+        'use_voice', default_value='false',
+        description='Start the ugv_voice stack (ear/brain/mouth + behavior_ctrl)')
+    voice_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory('ugv_voice'), 'launch', 'voice.launch.py')),
+        condition=IfCondition(use_voice))
+
     return LaunchDescription([
         serial_device_arg,
+        use_voice_arg,
         robot_state_publisher,
         controller_manager,
         jsb_spawner,
@@ -123,4 +137,5 @@ def generate_launch_description():
         lidar_launch,
         rf2o_launch,
         battery_alarm,
+        voice_launch,
     ])

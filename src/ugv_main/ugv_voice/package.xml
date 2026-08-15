@@ -13,6 +13,9 @@
   <depend>std_srvs</depend>
   <depend>ugv_interface</depend>
 
+  <!-- voice.launch.py starts the behavior_ctrl motion seam from ugv_tools -->
+  <exec_depend>ugv_tools</exec_depend>
+
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-requests</exec_depend>
 
