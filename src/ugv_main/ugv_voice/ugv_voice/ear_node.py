@@ -60,6 +60,7 @@ class EarNode(Node):
         self._listen_requested = threading.Event()
         self._asr = None
         self._asr_label = 'none'
+        self._capture_rate = None  # resolved on first successful device open
 
         self._worker = threading.Thread(target=self._worker_loop, daemon=True)
         self._worker.start()
@@ -86,6 +87,12 @@ class EarNode(Node):
 
     def _worker_loop(self):
         wake_enabled = bool(self.get_parameter('wake_word_enabled').value)
+        # Warm-load the ASR model so the first utterance doesn't pay for it.
+        try:
+            self._load_asr()
+        except Exception as e:
+            self.get_logger().warn(
+                f'ASR warm-load failed (will retry on first use): {e}')
         while rclpy.ok():
             # Everything in the cycle is guarded: an exception (bad device,
             # broken wake stack, model load failure) must never kill this
@@ -142,6 +149,7 @@ class EarNode(Node):
                         if quiet_run >= silence_blocks:
                             break
         except Exception as e:
+            self._capture_rate = None  # device may have changed — re-probe
             self.get_logger().error(
                 f'mic capture failed on device {device!r}: {e} — devices: '
                 f'{[d["name"] for d in sd.query_devices()]}')
@@ -165,15 +173,23 @@ class EarNode(Node):
     def _open_input_stream(self, sd, device, dtype, block_s):
         """Open a mono input stream at sample_rate; if the hardware refuses
         (raw hw: ALSA devices do no rate conversion — USB webcam mics are
-        often 44.1/48 kHz only), reopen at the device's native rate. Returns
+        often 44.1/48 kHz only), reopen at the device's native rate. The
+        working rate is cached so later cycles skip the failed open. Returns
         (unstarted stream, actual capture rate); callers resample to
         sample_rate."""
+        if self._capture_rate is not None:
+            block = int(self._capture_rate * block_s)
+            return (sd.InputStream(device=device, channels=1, dtype=dtype,
+                                   samplerate=self._capture_rate,
+                                   blocksize=block),
+                    self._capture_rate)
         try:
             block = int(self.sample_rate * block_s)
-            return (sd.InputStream(device=device, channels=1, dtype=dtype,
-                                   samplerate=self.sample_rate,
-                                   blocksize=block),
-                    self.sample_rate)
+            stream = sd.InputStream(device=device, channels=1, dtype=dtype,
+                                    samplerate=self.sample_rate,
+                                    blocksize=block)
+            self._capture_rate = self.sample_rate
+            return stream, self.sample_rate
         except sd.PortAudioError:
             native = int(sd.query_devices(device, kind='input')
                          ['default_samplerate'])
@@ -181,9 +197,10 @@ class EarNode(Node):
                 f'device {device!r} cannot capture at {self.sample_rate} Hz '
                 f'— capturing at {native} Hz and resampling')
             block = int(native * block_s)
-            return (sd.InputStream(device=device, channels=1, dtype=dtype,
-                                   samplerate=native, blocksize=block),
-                    native)
+            stream = sd.InputStream(device=device, channels=1, dtype=dtype,
+                                    samplerate=native, blocksize=block)
+            self._capture_rate = native
+            return stream, native
 
     @staticmethod
     def _resample(np, audio, from_rate, to_rate):

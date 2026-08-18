@@ -8,7 +8,7 @@ voice_ear:
     capture_device: "Camera"          # PortAudio name substring
     sample_rate: 16000
     listen_window_s: 6.0
-    silence_after_speech_s: 0.8
+    silence_after_speech_s: 0.6       # turn ends sooner; <0.5 clips mid-sentence pauses
     energy_threshold: 0.015
     asr_model: "base.en"
     models_dir: "/home/ws/ugv_ws/models"
@@ -36,7 +36,7 @@ voice_chat:
     max_history_turns: 12
     system_prompt: ""                     # "" = built-in honest-machine persona
     auto_listen: true                     # re-arm the mic after each reply
-    relisten_delay_s: 0.7
+    relisten_delay_s: 0.4                 # mic re-arms speaking_grace_s + this after speech
     max_silent_turns: 2                   # empty listens before the session ends
 
 voice_mouth:
@@ -46,3 +46,4 @@ voice_mouth:
     piper_model: "/home/ws/ugv_ws/models/piper/en_US-lessac-medium.onnx"
     espeak_voice: "en-us"
     espeak_speed: 155
+    speaking_grace_s: 0.4             # /voice/speaking stays True this long after audio ends
