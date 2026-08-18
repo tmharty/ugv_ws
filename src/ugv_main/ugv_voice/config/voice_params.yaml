@@ -13,7 +13,7 @@ voice_ear:
     asr_model: "base.en"
     models_dir: "/home/ws/ugv_ws/models"
     wake_word_enabled: false          # push-to-talk until PTT is proven
-    wake_word_model: "hey_gooder"
+    wake_word_model: "hey_jarvis"
     wake_word_threshold: 0.6
 
 voice_brain:
