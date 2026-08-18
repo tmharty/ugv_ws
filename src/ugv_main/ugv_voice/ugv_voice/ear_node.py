@@ -117,7 +117,6 @@ class EarNode(Node):
             return None
 
         device = self._resolve_device(sd)
-        block = int(self.sample_rate * 0.03)
         max_blocks = int(self.listen_window_s / 0.03)
         silence_blocks = max(1, int(self.silence_s / 0.03))
 
@@ -126,8 +125,10 @@ class EarNode(Node):
         quiet_run = 0
         self.get_logger().info('listening…')
         try:
-            with sd.InputStream(device=device, channels=1, dtype='float32',
-                                samplerate=self.sample_rate, blocksize=block) as stream:
+            stream, capture_rate = self._open_input_stream(sd, device,
+                                                           'float32', 0.03)
+            block = int(capture_rate * 0.03)
+            with stream:
                 for _ in range(max_blocks):
                     data, _overflow = stream.read(block)
                     mono = data[:, 0]
@@ -149,7 +150,8 @@ class EarNode(Node):
         if not speech_started:
             self._publish_transcript('', 0.0)  # brain answers "heard nothing"
             return None
-        return np.concatenate(chunks)
+        return self._resample(np, np.concatenate(chunks),
+                              capture_rate, self.sample_rate)
 
     def _resolve_device(self, sd):
         name = str(self.get_parameter('capture_device').value)
@@ -159,6 +161,39 @@ class EarNode(Node):
             self.get_logger().warn(
                 f'capture_device {name!r} not found — using system default')
             return None
+
+    def _open_input_stream(self, sd, device, dtype, block_s):
+        """Open a mono input stream at sample_rate; if the hardware refuses
+        (raw hw: ALSA devices do no rate conversion — USB webcam mics are
+        often 44.1/48 kHz only), reopen at the device's native rate. Returns
+        (unstarted stream, actual capture rate); callers resample to
+        sample_rate."""
+        try:
+            block = int(self.sample_rate * block_s)
+            return (sd.InputStream(device=device, channels=1, dtype=dtype,
+                                   samplerate=self.sample_rate,
+                                   blocksize=block),
+                    self.sample_rate)
+        except sd.PortAudioError:
+            native = int(sd.query_devices(device, kind='input')
+                         ['default_samplerate'])
+            self.get_logger().warn(
+                f'device {device!r} cannot capture at {self.sample_rate} Hz '
+                f'— capturing at {native} Hz and resampling')
+            block = int(native * block_s)
+            return (sd.InputStream(device=device, channels=1, dtype=dtype,
+                                   samplerate=native, blocksize=block),
+                    native)
+
+    @staticmethod
+    def _resample(np, audio, from_rate, to_rate):
+        """Linear-interpolation resample — adequate for speech ASR/wake."""
+        if from_rate == to_rate:
+            return audio
+        n = int(round(len(audio) * to_rate / from_rate))
+        resampled = np.interp(np.linspace(0.0, len(audio) - 1, n),
+                              np.arange(len(audio)), audio)
+        return resampled.astype(audio.dtype)
 
     # --- ASR --------------------------------------------------------------
 
@@ -266,17 +301,21 @@ class EarNode(Node):
                 **self._oww_feature_paths())
         threshold = float(self.get_parameter('wake_word_threshold').value)
         device = self._resolve_device(sd)
-        block = int(self.sample_rate * 0.08)  # openwakeword expects 80 ms frames
+        # openwakeword expects 80 ms frames at sample_rate (16 kHz)
+        stream, capture_rate = self._open_input_stream(sd, device,
+                                                       'int16', 0.08)
+        block = int(capture_rate * 0.08)
 
-        with sd.InputStream(device=device, channels=1, dtype='int16',
-                            samplerate=self.sample_rate, blocksize=block) as stream:
+        with stream:
             while rclpy.ok():
                 if self._listen_requested.is_set():
                     return True  # PTT still works in wake-word mode
                 data, _ = stream.read(block)
                 if self._speaking:
                     continue  # don't wake on our own voice
-                scores = self._wake_model.predict(np.squeeze(data))
+                frame = self._resample(np, np.squeeze(data),
+                                       capture_rate, self.sample_rate)
+                scores = self._wake_model.predict(frame)
                 if any(s >= threshold for s in scores.values()):
                     self.get_logger().info('wake word detected')
                     self._wake_model.reset()
