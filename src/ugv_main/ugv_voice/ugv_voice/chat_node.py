@@ -219,6 +219,7 @@ class ChatNode(Node):
             'model': str(self.get_parameter('ollama_model').value),
             'messages': messages,
             'stream': True,
+            'think': False,
             'keep_alive': str(self.get_parameter('keep_alive').value),
             'options': {
                 'temperature': float(self.get_parameter('temperature').value),

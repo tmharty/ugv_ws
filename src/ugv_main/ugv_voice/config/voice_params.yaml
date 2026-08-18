@@ -13,7 +13,7 @@ voice_ear:
     asr_model: "base.en"
     models_dir: "/home/ws/ugv_ws/models"
     wake_word_enabled: false          # push-to-talk until PTT is proven
-    wake_word_model: "hey_jarvis"
+    wake_word_model: "hey_gooder"
     wake_word_threshold: 0.6
 
 voice_brain:
@@ -28,7 +28,7 @@ voice_brain:
 voice_chat:
   ros__parameters:
     ollama_url: "http://localhost:11434"  # host daemon; container shares its network
-    ollama_model: "gemma3n:e2b"           # Phase 3 model decision; qwen2.5:3b fallback
+    ollama_model: "gemma4:e2b-it-qat"           # Phase 3 model decision; qwen2.5:3b fallback
     request_timeout_s: 120.0              # first turn includes model load
     keep_alive: "10m"                     # auto-unload after 10 min idle
     temperature: 0.7
