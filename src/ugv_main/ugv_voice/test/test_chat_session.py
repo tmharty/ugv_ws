@@ -185,10 +185,10 @@ class FakeLLM:
 def run(loop, text, llm, tool_result='ok', still=lambda: True):
     spoken, calls = [], []
 
-    def run_tool(c, spoke):
-        calls.append((c, spoke))
-        return tool_result
-    out = loop.run(text, llm, spoken.append, run_tool, still)
+    def run_tools(cs, spoke):
+        calls.extend((c, spoke) for c in cs)
+        return [tool_result] * len(cs)
+    out = loop.run(text, llm, spoken.append, run_tools, still)
     return out, spoken, calls
 
 
@@ -261,7 +261,7 @@ def test_loop_barge_in_stops_speaking_and_tools():
 
     llm = FakeLLM([chunks('One.', ' Two.', tool_calls=[call('spin_around')])])
     calls = []
-    ToolLoop(h).run('x', llm, speak, lambda c, s: calls.append(c) or 'r',
+    ToolLoop(h).run('x', llm, speak, lambda cs, s: calls.extend(cs) or ['r'] * len(cs),
                     lambda: state['current'])
     assert spoken == ['One.']
     assert calls == []
@@ -286,7 +286,7 @@ def test_loop_midstream_failure_reports_spoke_any():
 
     spoken = []
     with pytest.raises(TurnFailed) as e:
-        ToolLoop(h).run('hi', broken, spoken.append, lambda c, s: 'r')
+        ToolLoop(h).run('hi', broken, spoken.append, lambda cs, s: ['r'] * len(cs))
     assert spoken == ['Hello there.']
     assert e.value.spoke_any is True
 
@@ -303,3 +303,29 @@ def test_default_prompt_describes_tools_not_a_ban():
     assert 'cannot move' not in DEFAULT_SYSTEM_PROMPT
     assert 'tool' in DEFAULT_SYSTEM_PROMPT
     assert 'one short sentence' in DEFAULT_SYSTEM_PROMPT
+
+
+def test_loop_hands_over_the_whole_round_at_once():
+    """Two calls in one message reach run_tools together, so the node can
+    enforce one-action-per-request across them (validate_round)."""
+    h = ChatHistory('sys')
+    llm = FakeLLM([chunks(tool_calls=[call('move', direction='forward'),
+                                      call('spin_around')]), chunks('ok.')])
+    rounds = []
+
+    def run_tools(cs, spoke):
+        rounds.append(list(cs))
+        return ['Started.', 'Refused: one action per request.']
+    ToolLoop(h).run('go and spin', llm, lambda s: None, run_tools)
+    assert len(rounds) == 1 and len(rounds[0]) == 2
+    tool_msgs = [m for m in h.messages() if m['role'] == 'tool']
+    assert [m['content'] for m in tool_msgs] == ['Started.',
+                                                 'Refused: one action per request.']
+    assert [m['tool_name'] for m in tool_msgs] == ['move', 'spin_around']
+
+
+def test_loop_rejects_mismatched_result_count():
+    h = ChatHistory('sys')
+    llm = FakeLLM([chunks(tool_calls=[call('stop')])])
+    with pytest.raises(RuntimeError):
+        ToolLoop(h).run('x', llm, lambda s: None, lambda cs, s: [])

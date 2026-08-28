@@ -249,7 +249,7 @@ class ChatNode(Node):
                 text,
                 stream_fn=self._stream_chat,
                 speak=lambda s: self._say(s, key='chat_reply'),
-                run_tool=self._run_tool,
+                run_tools=self._run_tools,
                 still_current=lambda: generation == self._generation)
         except TurnFailed as e:
             self.get_logger().error('LLM unreachable/failed: %s' % e.cause)
@@ -324,15 +324,18 @@ class ChatNode(Node):
 
     # --- tool dispatch ----------------------------------------------------
 
-    def _run_tool(self, call, spoke_prose):
-        """Validate one proposed call and dispatch it. Returns the tool
-        result text the model narrates. Called from the worker thread."""
-        validated = tools.validate_call(call.name, call.arguments)
-        self.get_logger().info('tool call %s(%r) -> %s%s' % (
-            call.name, call.arguments, validated.intent.name,
-            ' REJECTED: %s' % validated.intent.rejected_reason
-            if validated.rejected else ''))
-        return self._dispatch(validated, spoke_prose)
+    def _run_tools(self, calls, spoke_prose):
+        """Validate one round of proposed calls (only the first is honoured,
+        the rest are refused as compound) and dispatch them. Returns the
+        result texts the model narrates. Called from the worker thread."""
+        results = []
+        for call, validated in zip(calls, tools.validate_round(calls)):
+            self.get_logger().info('tool call %s(%r) -> %s%s' % (
+                call.name, call.arguments, validated.intent.name,
+                ' REJECTED: %s' % validated.intent.rejected_reason
+                if validated.rejected else ''))
+            results.append(self._dispatch(validated, spoke_prose))
+        return results
 
     def _dispatch(self, validated, spoke_prose):
         intent = validated.intent

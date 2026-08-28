@@ -174,18 +174,21 @@ class ToolLoop:
     """Bounded agent loop over an injected streaming LLM.
 
     run() streams one model reply, speaks prose sentence-by-sentence via
-    ``speak``, hands every proposed tool call to ``run_tool`` and feeds the
-    returned result text back to the model as a tool-role message so it
-    can narrate the outcome. At most ``max_tool_rounds`` rounds may carry
-    tool calls; the final round is requested without tools so a confused
-    model has to answer in prose and cannot loop.
+    ``speak``, hands the whole list of proposed tool calls from that reply
+    to ``run_tools`` (as one round, so the one-action-per-request cap can
+    be enforced across them) and feeds each returned result text back to
+    the model as a tool-role message so it can narrate the outcome. At
+    most ``max_tool_rounds`` rounds may carry tool calls; the final round
+    is requested without tools so a confused model has to answer in prose
+    and cannot loop.
 
     Callbacks (all supplied by chat_node, none imported here):
       stream_fn(messages, tools)  -> iterable of Ollama chunk dicts;
                                      tools is a schema list or None
       speak(sentence)             -> None
-      run_tool(ToolCall, spoke)   -> result text for the model; ``spoke``
-                                     is True if prose was spoken this round
+      run_tools(calls, spoke)     -> list of result texts, one per ToolCall;
+                                     ``spoke`` is True if prose was spoken
+                                     this round
       still_current()             -> False once a barge-in invalidates the turn
     """
 
@@ -194,10 +197,9 @@ class ToolLoop:
         self.max_tool_rounds = int(max_tool_rounds)
         self.tools_enabled = bool(tools_enabled)
 
-    def run(self, user_text, stream_fn, speak, run_tool, still_current=lambda: True):
+    def run(self, user_text, stream_fn, speak, run_tools, still_current=lambda: True):
         self.history.add_user(user_text)
         spoken = []
-        tool_calls_seen = 0
         for round_no in range(self.max_tool_rounds + 1):
             tools = (tool_schemas()
                      if self.tools_enabled and round_no < self.max_tool_rounds
@@ -232,10 +234,13 @@ class ToolLoop:
             self.history.add_assistant(clean_for_tts(''.join(content)), raw_calls)
             if not raw_calls:
                 return spoken
-            for call in parse_tool_calls({'tool_calls': raw_calls}):
-                tool_calls_seen += 1
-                result = run_tool(call, spoke_this_round)
+            calls = parse_tool_calls({'tool_calls': raw_calls})
+            results = list(run_tools(calls, spoke_this_round))
+            if len(results) != len(calls):
+                raise RuntimeError('run_tools returned %d results for %d calls'
+                                   % (len(results), len(calls)))
+            for call, result in zip(calls, results):
                 self.history.add_tool_result(call.name, str(result))
-                if not still_current():
-                    return spoken
+            if not still_current():
+                return spoken
         return spoken
