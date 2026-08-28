@@ -17,6 +17,7 @@ never to motion. Pure Python: zero ROS imports, fully unit-testable.
 
 import json
 from dataclasses import dataclass
+
 from . import intent_schema
 from .intent_schema import POINT_NAMES, ValidatedIntent
 

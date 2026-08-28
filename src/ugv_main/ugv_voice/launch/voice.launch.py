@@ -1,12 +1,14 @@
-"""Kid-facing voice control: ear (mic/ASR) + brain (intents) + mouth (TTS),
-plus the hardened behavior_ctrl action server they command motion through.
+"""SAFE MODE voice control (no LLM): ear (mic/ASR) + brain (RuleBrain
+intents) + mouth (TTS), plus the hardened behavior_ctrl action server.
 
 This is the scripted-speech pipeline — every spoken line comes from
 responses.py, and every motion passes the intent_schema validator and
-behavior_ctrl's own clamps. (The talk-only LLM mode is chat.launch.py.)
+behavior_ctrl's own clamps. The primary stack is chat.launch.py
+(chat-with-tools); this one stays as the fallback when no Ollama daemon
+is available or scripted speech is wanted.
 
-Normally included from bringup:  use_voice:=true on bringup_ros2_control.
 Standalone (sim / dev box):      ros2 launch ugv_voice voice.launch.py
+(bringup's use_voice:=true starts chat.launch.py instead.)
 Push-to-talk (default mode):
     ros2 topic pub --once /voice/listen_once std_msgs/msg/Empty '{}'
 

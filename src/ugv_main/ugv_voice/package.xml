@@ -3,8 +3,9 @@
 <package format="3">
   <name>ugv_voice</name>
   <version>0.1.0</version>
-  <description>Voice control: ear (ASR), brain (intent + validation), mouth (TTS).
-    All motion goes through the Behavior action / behavior_ctrl safety layer.</description>
+  <description>Voice control: ear (ASR), chat (LLM with validated tools), mouth (TTS),
+    plus the scripted brain safe mode. All motion goes through the tool/intent
+    validator and the Behavior action / behavior_ctrl safety layer.</description>
   <maintainer email="travisharty@gmail.com">Travis Harty</maintainer>
   <license>Apache-2.0</license>
 
@@ -13,7 +14,7 @@
   <depend>std_srvs</depend>
   <depend>ugv_interface</depend>
 
-  <!-- voice.launch.py starts the behavior_ctrl motion seam from ugv_tools -->
+  <!-- chat.launch.py / voice.launch.py start the behavior_ctrl motion seam from ugv_tools -->
   <exec_depend>ugv_tools</exec_depend>
 
   <exec_depend>python3-numpy</exec_depend>

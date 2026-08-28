@@ -1,21 +1,30 @@
-"""voice_chat: /voice/transcript -> Ollama LLM -> /voice/say.
+"""voice_chat: /voice/transcript -> Ollama LLM (with tools) -> speech + action.
 
-A conversational companion deliberately OUTSIDE the control path: no
-Behavior action client, no /cmd_vel, no estop wiring — this node can talk
-and do nothing else. It reuses the existing ear (mic/ASR) and mouth (TTS)
-nodes and talks to the Ollama daemon on the Jetson host (localhost works
-inside the container because run_jetson.sh uses --network host).
+The hub of the voice stack. The model converses freely and may *propose*
+tool calls (motion, LEDs, battery, saved points). Every proposal passes
+tools.py -> intent_schema.validate (allow-list + clamps) before anything
+is dispatched, and motion still goes through behavior_ctrl's own clamps,
+odom-staleness abort and estop. Speech safety is the persona prompt;
+action safety is deterministic and lives outside the model.
 
-Session flow: publish /voice/listen_once and speak. Each reply is streamed
-from the LLM sentence-by-sentence into /voice/say so speech starts before
-the model finishes writing. When the mouth falls silent the node re-arms
-the ear itself (auto_listen), so one trigger starts a whole conversation.
-The session ends on a goodbye phrase, after max_silent_turns empty
-listens, or if the LLM is unreachable.
+Turn flow:
+  1. stop word (ear flag or lexicon)  -> estop + barge-in, done, outside the LLM
+  2. pending go_to_point confirmation -> consume a yes/no
+  3. ToolLoop: stream the reply, speak prose sentence-by-sentence, validate
+     and dispatch each tool call, feed the result back so the model can
+     narrate; capped at max_tool_rounds per user turn
+  4. LLM unreachable -> RuleBrain parses the transcript through the same
+     validator and dispatch; "my chat brain is not answering" is spoken.
+     Basic motion and stop keep working with the daemon dead.
 
-A stop-word transcript barges in: the in-flight reply is abandoned and the
-mouth's queue is flushed via a PRIORITY_SAFETY message (the ear will also
-have called behavior/estop, which simply isn't running in chat-only mode).
+Motion dispatch is speak-then-act: the acknowledgement (the model's own
+sentence, else a per-tool template) is spoken first and the Behavior goal
+is sent after speak_before_act_s. A stop-generation counter, bumped by any
+estop, drops a goal still waiting in that window.
+
+Session flow is unchanged from talk-only chat: publish /voice/listen_once
+and speak; the ear is re-armed when the mouth falls silent (auto_listen);
+the session ends on a goodbye phrase or max_silent_turns empty listens.
 """
 
 import json
@@ -23,13 +32,19 @@ import queue
 import threading
 
 import rclpy
+from rclpy.action import ActionClient
 from rclpy.node import Node
 
-from std_msgs.msg import Bool, Empty
+from std_msgs.msg import Bool, Empty, Float32, Float32MultiArray
+from std_srvs.srv import Trigger
+from ugv_interface.action import Behavior
 from ugv_interface.msg import Say, Transcript
 
-from .chat_session import (ChatHistory, DEFAULT_SYSTEM_PROMPT,
-                           SentenceChunker, is_end_phrase)
+from . import intent_schema, responses, tools
+from .brains.rule_brain import RuleBrain
+from .chat_session import (ChatHistory, DEFAULT_SYSTEM_PROMPT, ToolLoop,
+                           TurnFailed, is_end_phrase)
+from .dialog_context import DialogContext
 
 
 class ChatNode(Node):
@@ -37,9 +52,10 @@ class ChatNode(Node):
         super().__init__('voice_chat')
 
         self.declare_parameter('ollama_url', 'http://localhost:11434')
-        self.declare_parameter('ollama_model', 'gemma3n:e2b')
+        self.declare_parameter('ollama_model', 'granite4:3b')
         # First request includes model load on the Jetson — allow for it.
         self.declare_parameter('request_timeout_s', 120.0)
+        self.declare_parameter('connect_timeout_s', 5.0)
         self.declare_parameter('keep_alive', '10m')
         self.declare_parameter('temperature', 0.7)
         self.declare_parameter('max_reply_tokens', 120)
@@ -48,22 +64,45 @@ class ChatNode(Node):
         self.declare_parameter('auto_listen', True)
         self.declare_parameter('relisten_delay_s', 0.7)
         self.declare_parameter('max_silent_turns', 2)
+        # Tools / action safety (mirrors voice_brain's params).
+        self.declare_parameter('tools_enabled', True)
+        self.declare_parameter('max_tool_rounds', 3)
+        self.declare_parameter('speak_before_act_s', 1.2)
+        self.declare_parameter('confirm_timeout_s', 15.0)
+        self.declare_parameter('max_motions_per_minute', 12)
+        self.declare_parameter('offline_fallback', True)
 
         system_prompt = (str(self.get_parameter('system_prompt').value)
                          or DEFAULT_SYSTEM_PROMPT)
         self._history = ChatHistory(
             system_prompt,
             max_turns=int(self.get_parameter('max_history_turns').value))
+        self._loop = ToolLoop(
+            self._history,
+            max_tool_rounds=int(self.get_parameter('max_tool_rounds').value),
+            tools_enabled=bool(self.get_parameter('tools_enabled').value))
+        self.speak_before_act_s = float(self.get_parameter('speak_before_act_s').value)
+        self.rule_brain = RuleBrain()
+        self.dialog = DialogContext(
+            confirm_timeout_s=float(self.get_parameter('confirm_timeout_s').value))
+        self.rate_limiter = intent_schema.CommandRateLimiter(
+            max_commands=int(self.get_parameter('max_motions_per_minute').value))
 
         self.say_pub = self.create_publisher(Say, '/voice/say', 10)
         self.listen_pub = self.create_publisher(Empty, '/voice/listen_once', 10)
+        self.led_pub = self.create_publisher(Float32MultiArray, 'ugv/led_ctrl', 10)
+        self.behavior_client = ActionClient(self, Behavior, 'behavior')
+        self.estop_client = self.create_client(Trigger, 'behavior/estop')
         self.create_subscription(Transcript, '/voice/transcript',
                                  self.transcript_callback, 10)
         self.create_subscription(Bool, '/voice/speaking',
                                  self.speaking_callback, 10)
+        self.create_subscription(Float32, 'voltage', self.voltage_callback, 10)
 
         self._queue = queue.Queue()
         self._generation = 0        # bumped on barge-in; worker drops stale work
+        self._stop_gen = 0          # bumped on any estop; drops pending goals
+        self._voltage = None
         self._speaking = False
         self._session_active = False
         self._silent_turns = 0
@@ -75,16 +114,17 @@ class ChatNode(Node):
         self._worker.start()
 
         self.get_logger().info(
-            'voice_chat up — model %r at %s (talk-only: no control interfaces).'
+            'voice_chat up — model %r at %s, tools %s.'
             ' Publish /voice/listen_once to start a conversation.'
             % (str(self.get_parameter('ollama_model').value),
-               str(self.get_parameter('ollama_url').value)))
+               str(self.get_parameter('ollama_url').value),
+               'enabled' if self._loop.tools_enabled else 'DISABLED'))
 
     # --- callbacks --------------------------------------------------------
 
     def transcript_callback(self, msg):
         text = msg.text.strip()
-        if msg.stop_word:
+        if msg.stop_word or (text and intent_schema.contains_stop_word(text)):
             self._barge_in()
             return
         if not text:
@@ -104,15 +144,22 @@ class ChatNode(Node):
         elif self._awaiting_relisten:
             self._schedule_relisten()
 
+    def voltage_callback(self, msg):
+        self._voltage = float(msg.data)
+
     # --- turn-taking ------------------------------------------------------
 
     def _barge_in(self):
-        """Stop word heard: drop the in-flight reply and silence the mouth."""
+        """Stop word heard: estop, drop the in-flight reply, silence the mouth.
+
+        Runs entirely outside the LLM loop. The ear already called
+        behavior/estop; calling it again is harmless and covers the case
+        where the ear's client was not ready."""
         self._generation += 1
         self._drain_queue()
-        self.get_logger().info('barge-in: reply abandoned, mouth flushed')
+        self._do_estop(say_it=True)
+        self.get_logger().info('barge-in: estop sent, reply abandoned, mouth flushed')
         if self._session_active:
-            self._say('Okay.', priority=Say.PRIORITY_SAFETY, key='chat_barge_in')
             self._awaiting_relisten = True
 
     def _silent_turn(self):
@@ -133,6 +180,7 @@ class ChatNode(Node):
         self._session_active = False
         self._awaiting_relisten = False
         self._silent_turns = 0
+        self.dialog.cancel()
         self._cancel_relisten_timer()
         self.get_logger().info('chat session ended (%s)' % reason)
 
@@ -177,9 +225,8 @@ class ChatNode(Node):
                 self._handle_turn(text)
             except Exception as e:
                 self.get_logger().error('chat turn failed: %s' % e)
-                self._say('My chat brain is not answering. Ending chat.',
-                          key='chat_error')
-                self._end_session('LLM failure')
+                self._say_key('chat_error')
+                self._finish_turn(self._generation)
             finally:
                 self._queue.task_done()
 
@@ -190,24 +237,61 @@ class ChatNode(Node):
             return
 
         generation = self._generation
-        self._history.add_user(text)
-        spoken = []
-        for sentence in self._iter_reply_sentences(self._history.messages()):
-            if generation != self._generation:
-                break  # barge-in mid-stream
-            self._say(sentence, key='chat_reply')
-            spoken.append(sentence)
-        self._history.add_assistant(' '.join(spoken))
 
-        if generation == self._generation:
-            self._awaiting_relisten = True
-            if not self._speaking:
-                # Reply was empty, or the mouth already finished: don't wait
-                # for a speaking transition that may never come.
-                self._schedule_relisten()
+        # A pending go_to_point confirmation eats yes/no; anything else
+        # implicitly cancels it and is processed normally.
+        if self._consume_confirmation(text):
+            self._finish_turn(generation)
+            return
 
-    def _iter_reply_sentences(self, messages):
-        """Stream the Ollama chat completion, yielding whole sentences."""
+        try:
+            self._loop.run(
+                text,
+                stream_fn=self._stream_chat,
+                speak=lambda s: self._say(s, key='chat_reply'),
+                run_tool=self._run_tool,
+                still_current=lambda: generation == self._generation)
+        except TurnFailed as e:
+            self.get_logger().error('LLM unreachable/failed: %s' % e.cause)
+            if e.spoke_any or not bool(self.get_parameter('offline_fallback').value):
+                self._say_key('chat_error')
+            else:
+                self._offline_fallback(text)
+
+        self._finish_turn(generation)
+
+    def _finish_turn(self, generation):
+        if generation != self._generation:
+            return  # barge-in already re-armed the ear
+        self._awaiting_relisten = True
+        if not self._speaking:
+            # Reply was empty, or the mouth already finished: don't wait
+            # for a speaking transition that may never come.
+            self._schedule_relisten()
+
+    def _consume_confirmation(self, text):
+        """True if the utterance was consumed as a yes/no to a pending goal."""
+        pending = self.dialog.pending()
+        if pending is None:
+            return False
+        parsed = self.rule_brain.parse(text).get('intent')
+        if parsed == 'affirm':
+            confirmed = self.dialog.resolve(True)
+            self._history.add_user(text)
+            self._history.add_assistant(
+                self._say_key('nav_confirmed', **confirmed.params))
+            self._send_behavior_later(confirmed)
+            return True
+        if parsed == 'deny':
+            self.dialog.resolve(False)
+            self._history.add_user(text)
+            self._history.add_assistant(self._say_key('nav_cancelled'))
+            return True
+        self.dialog.cancel()
+        return False
+
+    def _stream_chat(self, messages, tool_schemas):
+        """Stream one Ollama /api/chat completion, yielding chunk dicts."""
         try:
             import requests
         except ImportError as e:
@@ -226,23 +310,159 @@ class ChatNode(Node):
                 'num_predict': int(self.get_parameter('max_reply_tokens').value),
             },
         }
-        chunker = SentenceChunker()
-        timeout = (5.0, float(self.get_parameter('request_timeout_s').value))
+        if tool_schemas:
+            payload['tools'] = tool_schemas
+        timeout = (float(self.get_parameter('connect_timeout_s').value),
+                   float(self.get_parameter('request_timeout_s').value))
         with requests.post(url, json=payload, stream=True,
                            timeout=timeout) as resp:
             resp.raise_for_status()
             for line in resp.iter_lines():
                 if not line:
                     continue
-                data = json.loads(line)
-                if data.get('done'):
-                    break
-                for sentence in chunker.feed(
-                        data.get('message', {}).get('content', '')):
-                    yield sentence
-        tail = chunker.flush()
-        if tail:
-            yield tail
+                yield json.loads(line)
+
+    # --- tool dispatch ----------------------------------------------------
+
+    def _run_tool(self, call, spoke_prose):
+        """Validate one proposed call and dispatch it. Returns the tool
+        result text the model narrates. Called from the worker thread."""
+        validated = tools.validate_call(call.name, call.arguments)
+        self.get_logger().info('tool call %s(%r) -> %s%s' % (
+            call.name, call.arguments, validated.intent.name,
+            ' REJECTED: %s' % validated.intent.rejected_reason
+            if validated.rejected else ''))
+        return self._dispatch(validated, spoke_prose)
+
+    def _dispatch(self, validated, spoke_prose):
+        intent = validated.intent
+        for note in intent.clamp_notes:
+            self.get_logger().warn('clamped: %s' % note)
+
+        if validated.rejected:
+            self._say_key(validated.ack_key)
+            return validated.result_text
+
+        if intent.is_stop:
+            self._do_estop(say_it=True)
+            return validated.result_text
+
+        if intent.name in ('led_on', 'led_off', 'led_blink'):
+            self._do_led(intent.name)
+            return validated.result_text
+
+        if intent.name == 'battery_status':
+            if self._voltage is None:
+                return 'Battery voltage is not available right now.'
+            return 'Battery is at %.1f volts.' % self._voltage
+
+        if intent.behavior_json is None:
+            # Speech-only intents can't come from a tool; belt and braces.
+            return validated.result_text
+
+        # Motion / nav from here on.
+        if not self.rate_limiter.allow():
+            self.get_logger().warn('motion rate limit hit')
+            self._say_key('rate_limited')
+            return 'Refused: too many motion commands this minute.'
+
+        if not self.behavior_client.server_is_ready():
+            self.get_logger().error('behavior action server not available')
+            self._say_key('not_ready')
+            return 'Refused: the motion system is not responding.'
+
+        if intent.requires_confirmation:
+            self.dialog.request_confirmation(intent)
+            self._say_key(validated.ack_key, **intent.params)
+            return validated.result_text
+
+        # Speak-then-act: the model's own sentence is the acknowledgement
+        # unless the request was clamped (then the template states the
+        # real distance) or the model said nothing (then the template is
+        # the only audible warning before wheels move).
+        if validated.ack_key and (intent.clamp_notes or not spoke_prose):
+            self._say_key(validated.ack_key, **intent.params)
+        self._send_behavior_later(intent)
+        return validated.result_text
+
+    def _offline_fallback(self, text):
+        """LLM down: RuleBrain -> same validator -> same dispatch."""
+        self._say_key('chat_offline')
+        raw = self.rule_brain.parse(text)
+        intent = intent_schema.validate(raw)
+        self.get_logger().warn('offline fallback: %r -> %s' % (text, intent.name))
+        if intent.behavior_json is None and not intent.is_stop:
+            # Speech-only or unknown: the scripted line is all we have.
+            if intent.name in ('led_on', 'led_off', 'led_blink'):
+                self._do_led(intent.name)
+                self._say_key(intent.reply_key)
+            elif intent.name == 'battery_status':
+                if self._voltage is None:
+                    self._say_key('battery_status_unknown')
+                else:
+                    self._say_key('battery_status', voltage=self._voltage)
+            else:
+                self._say_key(intent.reply_key, **intent.params)
+            return
+        validated = tools.ValidatedTool(tool=intent.name, intent=intent,
+                                        result_text='')
+        # spoke_prose=False forces the scripted ack before any motion.
+        self._dispatch(validated, spoke_prose=False)
+
+    def _send_behavior_later(self, intent):
+        """Speak-then-act: delay the goal so the ack is audible before wheels
+        move, but abort silently if a stop lands during the delay."""
+        with self._lock:
+            gen = self._stop_gen
+
+        def send():
+            with self._lock:
+                if gen != self._stop_gen:
+                    self.get_logger().warn(
+                        '%s: dropped — stop requested during speak-then-act '
+                        'delay' % intent.name)
+                    return
+            goal = Behavior.Goal()
+            goal.command = intent.behavior_json
+            self.get_logger().info('sending behavior goal: %s' % intent.behavior_json)
+            future = self.behavior_client.send_goal_async(goal)
+            future.add_done_callback(self._goal_response)
+
+        timer = threading.Timer(self.speak_before_act_s, send)
+        timer.daemon = True
+        timer.start()
+
+    def _goal_response(self, future):
+        handle = future.result()
+        if handle is None or not handle.accepted:
+            self.get_logger().error('behavior goal rejected')
+
+    def _do_estop(self, say_it):
+        with self._lock:
+            self._stop_gen += 1
+        self.dialog.cancel()
+        if say_it:
+            self._say_key('estop', priority=Say.PRIORITY_SAFETY)
+        if self.estop_client.service_is_ready():
+            self.estop_client.call_async(Trigger.Request())
+        else:
+            self.get_logger().error('behavior/estop service not available!')
+
+    def _do_led(self, name):
+        if name == 'led_blink':
+            # Three cycles, driven by timers so nothing blocks.
+            for i in range(6):
+                level = 255.0 if i % 2 == 0 else 0.0
+                t = threading.Timer(0.4 * i, self._publish_led, args=(level,))
+                t.daemon = True
+                t.start()
+        else:
+            self._publish_led(255.0 if name == 'led_on' else 0.0)
+
+    def _publish_led(self, level):
+        msg = Float32MultiArray()
+        msg.data = [level, level]  # IO4, IO5
+        self.led_pub.publish(msg)
 
     # --- output -----------------------------------------------------------
 
@@ -252,6 +472,13 @@ class ChatNode(Node):
         msg.text = text
         msg.priority = priority
         self.say_pub.publish(msg)
+        self.get_logger().info('say[%s]: %s' % (key, text))
+
+    def _say_key(self, key, priority=Say.PRIORITY_NORMAL, **slots):
+        """Speak a scripted responses.py line (refusals, acks, safety)."""
+        text = responses.render(key, **slots)
+        self._say(text, priority=priority, key=key)
+        return text
 
 
 def main(args=None):

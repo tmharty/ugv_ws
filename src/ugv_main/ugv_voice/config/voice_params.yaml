@@ -16,20 +16,25 @@ voice_ear:
     wake_word_model: "hey_jarvis"
     wake_word_threshold: 0.6
 
+# Scripted safe mode (voice.launch.py) — no LLM.
 voice_brain:
   ros__parameters:
-    brain_backend: "rules"            # rules | ollama (Phase 3) | bedrock (Phase 4)
+    brain_backend: "rules"
     speak_before_act_s: 1.2           # speak-then-act reaction window
     confirm_timeout_s: 15.0
     max_motions_per_minute: 12
 
-# Talk-only LLM conversation (chat.launch.py). No control interfaces —
-# requires the host's Ollama daemon (voice_control_plan.md Phase 3 setup).
+# Chat-with-tools (chat.launch.py, the primary voice stack). The LLM
+# converses freely and proposes tool calls; every call is validated and
+# clamped (tools.py -> intent_schema) before behavior_ctrl sees it.
+# Requires the host's Ollama daemon (voice_control_plan.md Phase 2 setup)
+# with a tool-capable model pulled.
 voice_chat:
   ros__parameters:
     ollama_url: "http://localhost:11434"  # host daemon; container shares its network
-    ollama_model: "granite4:3b"           # Phase 3 model decision; qwen2.5:3b fallback
+    ollama_model: "granite4:3b"           # tool-capable; qwen2.5:3b-instruct-q4_K_M fallback
     request_timeout_s: 120.0              # first turn includes model load
+    connect_timeout_s: 5.0                # daemon unreachable -> RuleBrain fallback
     keep_alive: "10m"                     # auto-unload after 10 min idle
     temperature: 0.7
     max_reply_tokens: 120                 # keeps spoken replies short
@@ -38,6 +43,12 @@ voice_chat:
     auto_listen: true                     # re-arm the mic after each reply
     relisten_delay_s: 0.4                 # mic re-arms speaking_grace_s + this after speech
     max_silent_turns: 2                   # empty listens before the session ends
+    tools_enabled: true                   # false = talk-only (no tool schemas sent)
+    max_tool_rounds: 3                    # tool rounds per user turn; last round is prose-only
+    speak_before_act_s: 1.2               # speak-then-act reaction window
+    confirm_timeout_s: 15.0               # go_to_point verbal-yes window
+    max_motions_per_minute: 12
+    offline_fallback: true                # LLM down -> RuleBrain basic commands
 
 voice_mouth:
   ros__parameters:

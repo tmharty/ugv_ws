@@ -114,15 +114,18 @@ def generate_launch_description():
     battery_alarm = Node(package='ugv_bringup', executable='battery_alarm', output='screen')
 
     # --- voice control (opt-in) ---
-    # Brings up ear/brain/mouth plus behavior_ctrl (the motion seam voice
-    # commands go through — not started anywhere else in bringup).
+    # Brings up ear/chat/mouth (chat-with-tools via the host's Ollama daemon)
+    # plus behavior_ctrl (the motion seam voice commands go through — not
+    # started anywhere else in bringup). The no-LLM safe mode is
+    # ugv_voice/voice.launch.py, launched separately.
     use_voice = LaunchConfiguration('use_voice')
     use_voice_arg = DeclareLaunchArgument(
         'use_voice', default_value='false',
-        description='Start the ugv_voice stack (ear/brain/mouth + behavior_ctrl)')
+        description='Start the ugv_voice chat-with-tools stack '
+                    '(ear/chat/mouth + behavior_ctrl)')
     voice_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('ugv_voice'), 'launch', 'voice.launch.py')),
+            os.path.join(get_package_share_directory('ugv_voice'), 'launch', 'chat.launch.py')),
         condition=IfCondition(use_voice))
 
     return LaunchDescription([
