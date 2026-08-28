@@ -1,7 +1,10 @@
-"""The robot's entire utterable surface for Phase 1.
+"""Scripted lines: the deterministic part of what the robot says.
 
-Every spoken line comes from this table — no model-generated text is ever
-spoken. Persona: clearly a machine. Short, cheerful, robotic.
+In the scripted pipeline (voice.launch.py safe mode) every spoken line
+comes from this table. In chat-with-tools the LLM speaks freely and these
+templates survive only where determinism matters: safety messages,
+motion acknowledgements/clamps, refusals and offline/fallback lines.
+Persona: clearly a machine. Short, cheerful, robotic.
 
 Keys marked (safety) are spoken at PRIORITY_SAFETY and interrupt playback.
 """
@@ -53,6 +56,11 @@ RESPONSES = {
 
     # System messages.
     'not_ready': ['My motion system is not responding. I will not move.'],
+
+    # Chat-with-tools fallback lines (chat_node).
+    'chat_offline': ['My chat brain is not answering. '
+                     'I can still do simple commands.'],
+    'chat_error':   ['My chat brain hit an error. Say that again.'],
 }
 
 _counters = {}
