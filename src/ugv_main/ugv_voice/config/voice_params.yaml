@@ -9,13 +9,21 @@ voice_ear:
     sample_rate: 16000
     listen_window_s: 6.0
     silence_after_speech_s: 0.6       # turn ends sooner; <0.5 clips mid-sentence pauses
-    energy_threshold: 0.015
+    min_speech_s: 0.2                 # speech this long starts an utterance
+    pre_roll_s: 0.3                   # audio kept from before speech start
+    vad_backend: "auto"               # auto | silero | energy (auto = silero if available)
+    vad_threshold: 0.5                # silero speech probability
+    energy_threshold: 0.015           # energy-gate fallback (RMS, 0..1)
+    chime_lead_s: 0.3                 # gap after /voice/listening for the mouth's chime
     asr_model: "base.en"
     models_dir: "/home/ws/ugv_ws/models"
     wake_word_enabled: false          # push-to-talk until PTT is proven
     wake_word_model: "hey_jarvis"
     wake_word_threshold: 0.6
     record_max_s: 15.0                # voice/record service hard cap (tool clamps to 3–15)
+    stop_watch_during_motion: true    # continuous "stop" listening while behavior/motion_active
+    stop_watch_while_speaking: false  # ON ONLY WITH AN AEC MIC (ReSpeaker): else it hears itself
+    stop_watch_max_segment_s: 2.0
 
 # Scripted safe mode (voice.launch.py) — no LLM.
 voice_brain:
@@ -51,6 +59,7 @@ voice_chat:
     max_motions_per_minute: 12
     offline_fallback: true                # LLM down -> RuleBrain basic commands
     recordings_dir: "/tmp/ugv_voice_recordings"  # record_replay temp wavs; swept on start/session end
+    estop_ack_cooldown_s: 2.5             # spoken "Stopping." at most this often (self-hearing guard)
 
 voice_mouth:
   ros__parameters:
@@ -60,3 +69,5 @@ voice_mouth:
     espeak_voice: "en-us"
     espeak_speed: 155
     speaking_grace_s: 0.4             # /voice/speaking stays True this long after audio ends
+    chime_enabled: true               # short two-note chime when the ear starts listening
+    chime_volume: 0.3

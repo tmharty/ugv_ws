@@ -32,7 +32,7 @@ from rclpy.node import Node
 from std_msgs.msg import Bool
 from ugv_interface.msg import Say
 
-from .audio_fx import read_wav_mono16, tape_deck
+from .audio_fx import chime, read_wav_mono16, tape_deck
 
 
 class MouthNode(Node):
@@ -46,6 +46,8 @@ class MouthNode(Node):
         self.declare_parameter('espeak_voice', 'en-us')
         self.declare_parameter('espeak_speed', 155)
         self.declare_parameter('speaking_grace_s', 0.4)
+        self.declare_parameter('chime_enabled', True)     # "I'm listening" chime
+        self.declare_parameter('chime_volume', 0.3)
 
         self.playback_device = str(self.get_parameter('playback_device').value)
         self.speaking_grace_s = float(
@@ -53,6 +55,10 @@ class MouthNode(Node):
 
         self.speaking_pub = self.create_publisher(Bool, '/voice/speaking', 10)
         self.create_subscription(Say, '/voice/say', self.say_callback, 10)
+        self.create_subscription(Bool, '/voice/listening', self.listening_callback, 10)
+        self._chime_rate = 16000
+        self._chime_pcm = chime(self._chime_rate,
+                                float(self.get_parameter('chime_volume').value))
 
         self._piper = None
         self._piper_old_api = False
@@ -129,6 +135,31 @@ class MouthNode(Node):
                     os.unlink(msg.wav_path)
                 except OSError:
                     pass
+
+    def listening_callback(self, msg):
+        """Ear started a listen window: play the chime, unless speech is in
+        flight (the ear never listens while we speak; belt and braces)."""
+        if not msg.data or not bool(self.get_parameter('chime_enabled').value):
+            return
+        with self._state_lock:
+            busy = self._pending > 0
+        if busy:
+            return
+        threading.Thread(target=self._play_chime, daemon=True).start()
+
+    def _play_chime(self):
+        try:
+            with self._player_lock:
+                if self._player is not None and self._player.poll() is None:
+                    return   # never talk over a sentence in progress
+                proc = subprocess.Popen(
+                    ['aplay', '-q', '-t', 'raw', '-f', 'S16_LE', '-c', '1',
+                     '-r', str(self._chime_rate), '-D', self.playback_device],
+                    stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL)
+            proc.communicate(input=self._chime_pcm, timeout=2.0)
+        except Exception as e:
+            self.get_logger().warn('chime failed: %s' % e)
 
     def _flush_pipeline(self):
         """Safety flush: invalidate everything queued in both stages so only

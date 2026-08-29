@@ -82,6 +82,10 @@ class ChatNode(Node):
         self.declare_parameter('max_motions_per_minute', 12)
         self.declare_parameter('offline_fallback', True)
         self.declare_parameter('recordings_dir', '/tmp/ugv_voice_recordings')
+        # A self-heard "Stopping." (no AEC yet) must not re-trigger a spoken
+        # "Stopping." forever: the estop itself always fires, the ack is
+        # rate-limited.
+        self.declare_parameter('estop_ack_cooldown_s', 2.5)
 
         system_prompt = (str(self.get_parameter('system_prompt').value)
                          or DEFAULT_SYSTEM_PROMPT)
@@ -121,6 +125,7 @@ class ChatNode(Node):
         self._motion_active = False
         self._pending_goals = 0     # speak-then-act goals not yet sent
         self._last_goal_sent = 0.0  # monotonic; grace until motion_active catches up
+        self._last_estop_ack = -1e9
         self.MOTION_FLAG_GRACE_S = 1.5
         self._speaking = False
         self._session_active = False
@@ -562,8 +567,15 @@ class ChatNode(Node):
         with self._lock:
             self._stop_gen += 1
         self.dialog.cancel()
-        if say_it:
+        now = time.monotonic()
+        cooldown = float(self.get_parameter('estop_ack_cooldown_s').value)
+        if say_it and now - self._last_estop_ack >= cooldown:
+            self._last_estop_ack = now
             self._say_key('estop', priority=Say.PRIORITY_SAFETY)
+        elif say_it:
+            # Still flush the mouth (a stop must interrupt speech) — silently.
+            self._say('', priority=Say.PRIORITY_SAFETY, key='estop_repeat')
+            self.get_logger().info('estop ack suppressed (cooldown)')
         if self.estop_client.service_is_ready():
             self.estop_client.call_async(Trigger.Request())
         else:

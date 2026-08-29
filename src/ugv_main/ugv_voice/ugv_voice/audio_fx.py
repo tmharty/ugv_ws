@@ -65,3 +65,15 @@ def write_wav_mono16(path, pcm_int16, rate):
         w.setsampwidth(2)
         w.setframerate(int(rate))
         w.writeframes(pcm_int16)
+
+
+def chime(rate=16000, volume=0.3):
+    """Short two-note "I'm listening" chime as int16 PCM (~180 ms)."""
+    import numpy as np
+    out = []
+    for hz, secs in ((880.0, 0.08), (1320.0, 0.10)):
+        t = np.arange(int(rate * secs)) / rate
+        env = np.minimum(1.0, np.minimum(t / 0.01, (secs - t) / 0.02))
+        out.append(np.sin(2 * np.pi * hz * t) * env)
+    sig = np.concatenate(out) * float(min(1.0, max(0.0, volume))) * 32767
+    return sig.astype(np.int16).tobytes()
