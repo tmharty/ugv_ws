@@ -28,6 +28,8 @@ def script(req):
     if 'forward' in t:
         return [chunk('Rolling '), chunk('forward. '),
                 chunk(tool_calls=[call('move', direction='forward', distance_m=0.4)])]
+    if 'record' in t:
+        return [chunk('Say something! ', tool_calls=[call('record_replay', duration_s=3, speeds=[1.0, 'chipmunk'])])]
     if 'battery' in t:
         return [chunk(tool_calls=[call('battery_status')])]
     if 'point' in t:

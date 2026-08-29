@@ -22,23 +22,33 @@ sentence, else a per-tool template) is spoken first and the Behavior goal
 is sent after speak_before_act_s. A stop-generation counter, bumped by any
 estop, drops a goal still waiting in that window.
 
+record_replay (Phase 3) is orchestration only: spoken countdown, wait for
+the mouth to fall silent, call the ear's voice/record service, queue the
+wav playbacks on /voice/say with speed factors. Refused while anything is
+moving or a goal is pending (recording blinds the stop-word scanner).
+
 Session flow is unchanged from talk-only chat: publish /voice/listen_once
 and speak; the ear is re-armed when the mouth falls silent (auto_listen);
 the session ends on a goodbye phrase or max_silent_turns empty listens.
 """
 
+import glob
 import json
+import os
 import queue
 import threading
+import time
 
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile
 
 from std_msgs.msg import Bool, Empty, Float32, Float32MultiArray
 from std_srvs.srv import Trigger
 from ugv_interface.action import Behavior
 from ugv_interface.msg import Say, Transcript
+from ugv_interface.srv import Record
 
 from . import intent_schema, responses, tools
 from .brains.rule_brain import RuleBrain
@@ -71,6 +81,7 @@ class ChatNode(Node):
         self.declare_parameter('confirm_timeout_s', 15.0)
         self.declare_parameter('max_motions_per_minute', 12)
         self.declare_parameter('offline_fallback', True)
+        self.declare_parameter('recordings_dir', '/tmp/ugv_voice_recordings')
 
         system_prompt = (str(self.get_parameter('system_prompt').value)
                          or DEFAULT_SYSTEM_PROMPT)
@@ -93,6 +104,10 @@ class ChatNode(Node):
         self.led_pub = self.create_publisher(Float32MultiArray, 'ugv/led_ctrl', 10)
         self.behavior_client = ActionClient(self, Behavior, 'behavior')
         self.estop_client = self.create_client(Trigger, 'behavior/estop')
+        self.record_client = self.create_client(Record, 'voice/record')
+        self.create_subscription(
+            Bool, 'behavior/motion_active', self.motion_active_callback,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.create_subscription(Transcript, '/voice/transcript',
                                  self.transcript_callback, 10)
         self.create_subscription(Bool, '/voice/speaking',
@@ -103,12 +118,19 @@ class ChatNode(Node):
         self._generation = 0        # bumped on barge-in; worker drops stale work
         self._stop_gen = 0          # bumped on any estop; drops pending goals
         self._voltage = None
+        self._motion_active = False
+        self._pending_goals = 0     # speak-then-act goals not yet sent
+        self._last_goal_sent = 0.0  # monotonic; grace until motion_active catches up
+        self.MOTION_FLAG_GRACE_S = 1.5
         self._speaking = False
         self._session_active = False
         self._silent_turns = 0
         self._awaiting_relisten = False
         self._relisten_timer = None
         self._lock = threading.Lock()
+
+        self.recordings_dir = str(self.get_parameter('recordings_dir').value)
+        self._sweep_recordings()
 
         self._worker = threading.Thread(target=self._worker_loop, daemon=True)
         self._worker.start()
@@ -147,6 +169,9 @@ class ChatNode(Node):
     def voltage_callback(self, msg):
         self._voltage = float(msg.data)
 
+    def motion_active_callback(self, msg):
+        self._motion_active = bool(msg.data)
+
     # --- turn-taking ------------------------------------------------------
 
     def _barge_in(self):
@@ -182,6 +207,7 @@ class ChatNode(Node):
         self._silent_turns = 0
         self.dialog.cancel()
         self._cancel_relisten_timer()
+        self._sweep_recordings()
         self.get_logger().info('chat session ended (%s)' % reason)
 
     def _schedule_relisten(self):
@@ -359,6 +385,9 @@ class ChatNode(Node):
                 return 'Battery voltage is not available right now.'
             return 'Battery is at %.1f volts.' % self._voltage
 
+        if intent.name == 'record_replay':
+            return self._do_record_replay(validated)
+
         if intent.behavior_json is None:
             # Speech-only intents can't come from a tool; belt and braces.
             return validated.result_text
@@ -412,19 +441,108 @@ class ChatNode(Node):
         # spoke_prose=False forces the scripted ack before any motion.
         self._dispatch(validated, spoke_prose=False)
 
+    # --- record_replay ----------------------------------------------------
+
+    def _do_record_replay(self, validated):
+        """Countdown -> mouth silent -> ear records -> playbacks queued.
+        Runs on the worker thread; blocks it for the recording, which is
+        fine: nothing else may happen while the mic is recording anyway."""
+        p = validated.intent.params
+        duration, speeds = p['duration_s'], p['speeds']
+        if self._motion_busy():
+            self.get_logger().warn('record_replay refused: motion active')
+            self._say_key('record_refused_moving')
+            return 'Refused: the robot is moving; recording is not allowed while moving.'
+        if not self.record_client.service_is_ready():
+            self.get_logger().error('voice/record service not available')
+            self._say_key('record_unavailable')
+            return 'Refused: the microphone recording service is not available.'
+
+        os.makedirs(self.recordings_dir, exist_ok=True)
+        path = os.path.join(self.recordings_dir, 'rec_%d.wav' % int(time.time() * 1000))
+
+        self._say_key('record_countdown', duration_s=duration)
+        self._wait_mouth_idle(timeout=20.0)
+        if self._motion_busy():   # a goal landed meanwhile
+            self._say_key('record_refused_moving')
+            return 'Refused: the robot started moving.'
+
+        req = Record.Request()
+        req.duration_s = float(duration)
+        req.path = path
+        future = self.record_client.call_async(req)
+        deadline = time.monotonic() + duration + 15.0
+        while not future.done() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        result = future.result() if future.done() else None
+        if result is None or not result.success:
+            self.get_logger().error('record failed: %s' % (
+                result.message if result else 'timeout'))
+            self._say_key('record_failed')
+            self._unlink_quiet(path)
+            return 'Refused: recording failed (%s).' % (
+                result.message if result else 'timeout')
+
+        self._say_key('record_playback')
+        for i, speed in enumerate(speeds):
+            msg = Say()
+            msg.key = 'record_playback_wav'
+            msg.wav_path = result.path
+            msg.speed_factor = float(speed)
+            msg.delete_after = (i == len(speeds) - 1)   # never persists
+            self.say_pub.publish(msg)
+        self.get_logger().info('record_replay: %.1f s recorded, playbacks at %s'
+                               % (duration, speeds))
+        return validated.result_text
+
+    def _motion_busy(self):
+        """True while anything moves, a goal waits in the speak-then-act
+        window, or a goal was sent so recently that behavior_ctrl's latched
+        flag may not have caught up yet."""
+        with self._lock:
+            pending = self._pending_goals
+            recent = time.monotonic() - self._last_goal_sent < self.MOTION_FLAG_GRACE_S
+        return self._motion_active or pending > 0 or recent
+
+    def _wait_mouth_idle(self, timeout):
+        """Wait for the countdown to start playing and then finish, so the
+        recording does not capture the robot's own voice."""
+        t0 = time.monotonic()
+        while not self._speaking and time.monotonic() - t0 < 3.0:
+            time.sleep(0.05)
+        while self._speaking and time.monotonic() - t0 < timeout:
+            time.sleep(0.05)
+
+    def _sweep_recordings(self):
+        """Recordings are temp files; make sure none outlive a session."""
+        for f in glob.glob(os.path.join(self.recordings_dir, 'rec_*.wav')):
+            self._unlink_quiet(f)
+
+    @staticmethod
+    def _unlink_quiet(path):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+    # --- motion dispatch --------------------------------------------------
+
     def _send_behavior_later(self, intent):
         """Speak-then-act: delay the goal so the ack is audible before wheels
         move, but abort silently if a stop lands during the delay."""
         with self._lock:
             gen = self._stop_gen
+            self._pending_goals += 1
 
         def send():
             with self._lock:
+                self._pending_goals -= 1
                 if gen != self._stop_gen:
                     self.get_logger().warn(
                         '%s: dropped — stop requested during speak-then-act '
                         'delay' % intent.name)
                     return
+                self._last_goal_sent = time.monotonic()
             goal = Behavior.Goal()
             goal.command = intent.behavior_json
             self.get_logger().info('sending behavior goal: %s' % intent.behavior_json)

@@ -15,6 +15,7 @@ voice_ear:
     wake_word_enabled: false          # push-to-talk until PTT is proven
     wake_word_model: "hey_jarvis"
     wake_word_threshold: 0.6
+    record_max_s: 15.0                # voice/record service hard cap (tool clamps to 3–15)
 
 # Scripted safe mode (voice.launch.py) — no LLM.
 voice_brain:
@@ -49,6 +50,7 @@ voice_chat:
     confirm_timeout_s: 15.0               # go_to_point verbal-yes window
     max_motions_per_minute: 12
     offline_fallback: true                # LLM down -> RuleBrain basic commands
+    recordings_dir: "/tmp/ugv_voice_recordings"  # record_replay temp wavs; swept on start/session end
 
 voice_mouth:
   ros__parameters:

@@ -13,13 +13,26 @@ The LLM only ever *proposes* a call. Unknown names, malformed arguments,
 NaN/negative/huge numbers, extra keys and compound payloads all resolve to
 a ``ValidatedIntent`` carrying a ``rejected_reason`` (spoken refusal) and
 never to motion. Pure Python: zero ROS imports, fully unit-testable.
+
+One exception to "everything is an intent_schema intent": ``record_replay``
+never touches behavior_ctrl, so its clamps (duration, playback count,
+speeds) live here.
 """
 
 import json
 from dataclasses import dataclass
 
 from . import intent_schema
-from .intent_schema import POINT_NAMES, ValidatedIntent
+from .audio_fx import SPEED_MAX, SPEED_MIN
+from .intent_schema import POINT_NAMES, ValidatedIntent, _coerce_number
+
+# record_replay clamps (voice_control_plan.md Phase 3).
+RECORD_MIN_S = 3.0
+RECORD_MAX_S = 15.0
+RECORD_DEFAULT_S = 5.0
+RECORD_MAX_PLAYBACKS = 4
+SPEED_ALIASES = {'deep': 0.7, 'slow': 0.7, 'low': 0.7, 'normal': 1.0,
+                 'chipmunk': 1.3, 'fast': 1.3, 'high': 1.3, 'squeaky': 1.5}
 
 # Per-tool-round cap on the number of calls we will even look at; anything
 # beyond it is dropped with a refusal. One utterance is one action.
@@ -95,6 +108,21 @@ TOOL_SCHEMAS = [
         {'mode': {'type': 'string', 'enum': ['on', 'off', 'blink']}},
         ('mode',),
     ),
+    _schema(
+        'record_replay',
+        'Record the user\'s voice for a few seconds (3 to 15), then play it '
+        'back, once per listed speed: 1.0 is as recorded, 0.7 is deep and '
+        'slow, 1.3 is chipmunk. Use for "record me", "play it back funny", '
+        '"say it back like a chipmunk". Up to 4 playbacks. Not possible '
+        'while the robot is moving.',
+        {
+            'duration_s': {'type': 'number',
+                           'description': 'Seconds to record, 3 to 15. Default 5.'},
+            'speeds': {'type': 'array', 'items': {'type': 'number'},
+                       'description': 'Playback speeds, e.g. [1.0, 1.3]. '
+                                      'Default [1.0].'},
+        },
+    ),
 ]
 
 TOOL_NAMES = frozenset(s['function']['name'] for s in TOOL_SCHEMAS)
@@ -109,6 +137,7 @@ _ALLOWED_ARGS = {
     'save_point': {'point'},
     'battery_status': set(),
     'led': {'mode'},
+    'record_replay': {'duration_s', 'speeds'},
 }
 
 # Short spoken acknowledgement per validated intent, used when the model
@@ -221,6 +250,9 @@ def validate_call(name, arguments):
     if extra:
         return _reject(name, 'unexpected_arguments:%s' % sorted(extra))
 
+    if name == 'record_replay':
+        return _validate_record_replay(arguments)
+
     raw = _to_raw_intent(name, arguments)
     if isinstance(raw, ValidatedTool):
         return raw                                  # already a rejection
@@ -265,6 +297,60 @@ def _to_raw_intent(name, arguments):
         return {'intent': 'led_' + mode.lower().strip()}
     # Parameterless tools: spin_around, stop, battery_status.
     return {'intent': name}
+
+
+def _validate_record_replay(arguments):
+    """Clamp duration to 3–15 s, at most 4 playbacks, speeds 0.5–2.0.
+    Named speeds ("chipmunk") are accepted for the small model's sake."""
+    notes = []
+    raw_d = arguments.get('duration_s', RECORD_DEFAULT_S)
+    duration = _coerce_number(raw_d)
+    if duration is None:
+        return _reject('record_replay', 'bad_number:duration_s=%r' % (raw_d,))
+    if duration > RECORD_MAX_S:
+        notes.append('duration_s %g clamped to max %g' % (duration, RECORD_MAX_S))
+        duration = RECORD_MAX_S
+    elif duration < RECORD_MIN_S:
+        notes.append('duration_s %g clamped to min %g' % (duration, RECORD_MIN_S))
+        duration = RECORD_MIN_S
+
+    raw_speeds = arguments.get('speeds', [1.0])
+    if raw_speeds is None:
+        raw_speeds = [1.0]
+    if isinstance(raw_speeds, (int, float, str)) and not isinstance(raw_speeds, bool):
+        raw_speeds = [raw_speeds]
+    if not isinstance(raw_speeds, (list, tuple)):
+        return _reject('record_replay', 'speeds_not_a_list')
+    if not raw_speeds:
+        raw_speeds = [1.0]
+    speeds = []
+    for v in raw_speeds:
+        if isinstance(v, str) and v.strip().lower() in SPEED_ALIASES:
+            f = SPEED_ALIASES[v.strip().lower()]
+        else:
+            f = _coerce_number(v)
+        if f is None:
+            return _reject('record_replay', 'bad_speed:%r' % (v,))
+        if f > SPEED_MAX:
+            notes.append('speed %g clamped to max %g' % (f, SPEED_MAX))
+            f = SPEED_MAX
+        elif f < SPEED_MIN:
+            notes.append('speed %g clamped to min %g' % (f, SPEED_MIN))
+            f = SPEED_MIN
+        speeds.append(f)
+    if len(speeds) > RECORD_MAX_PLAYBACKS:
+        notes.append('%d playbacks reduced to %d' % (len(speeds), RECORD_MAX_PLAYBACKS))
+        speeds = speeds[:RECORD_MAX_PLAYBACKS]
+
+    intent = ValidatedIntent(name='record_replay',
+                             params={'duration_s': duration, 'speeds': speeds},
+                             reply_key='ack_record_replay',
+                             clamp_notes=tuple(notes))
+    text = 'Recorded %g seconds and played it back %d time(s) at speed(s) %s.' % (
+        duration, len(speeds), ', '.join('%g' % f for f in speeds))
+    if notes:
+        text += ' (Request was reduced to the safe limit: %s.)' % '; '.join(notes)
+    return ValidatedTool(tool='record_replay', intent=intent, result_text=text)
 
 
 def _result_text(name, intent):

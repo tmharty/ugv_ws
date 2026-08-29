@@ -57,6 +57,15 @@ RESPONSES = {
     # System messages.
     'not_ready': ['My motion system is not responding. I will not move.'],
 
+    # record_replay tool (chat_node orchestration; playback is the wav).
+    'record_countdown':      ['Recording for {duration_s:g} seconds. In 3, 2, 1.'],
+    'record_playback':       ['Here is what I heard.'],
+    'record_refused_moving': ['I cannot record while I am moving. '
+                              'Ask me again when I have stopped.'],
+    'record_unavailable':    ['My ears cannot record right now.'],
+    'record_failed':         ['Recording failed. Beep.'],
+    'ack_record_replay':     ['Okay, recording.'],
+
     # Chat-with-tools fallback lines (chat_node).
     'chat_offline': ['My chat brain is not answering. '
                      'I can still do simple commands.'],

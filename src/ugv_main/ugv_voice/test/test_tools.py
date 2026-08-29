@@ -26,7 +26,7 @@ def test_schema_names_match_registry():
     assert set(names) == tools.TOOL_NAMES
     assert len(names) == len(set(names))
     assert set(names) == {'move', 'turn', 'spin_around', 'stop', 'go_to_point',
-                          'save_point', 'battery_status', 'led'}
+                          'save_point', 'battery_status', 'led', 'record_replay'}
 
 
 def test_schemas_are_fresh_copies():
@@ -317,3 +317,48 @@ def test_every_accepted_motion_is_within_envelope():
         out = validate_call('turn', {'direction': 'right', 'angle_deg': v})
         assert 15.0 <= abs(behavior(out)[0]['data']) <= 180.0, v
         assert math.isfinite(behavior(out)[0]['data'])
+
+
+# --- record_replay (Phase 3) ----------------------------------------------
+
+def test_record_replay_in_schema_and_defaults():
+    assert 'record_replay' in tools.TOOL_NAMES
+    v = validate_call('record_replay', {})
+    assert not v.rejected and not v.is_motion and not v.is_stop
+    assert v.intent.behavior_json is None              # never touches behavior_ctrl
+    assert v.intent.params == {'duration_s': 5.0, 'speeds': [1.0]}
+    assert 'Recorded 5 seconds' in v.result_text
+
+
+def test_record_replay_clamps_duration():
+    assert validate_call('record_replay', {'duration_s': 60}).intent.params['duration_s'] == 15.0
+    assert validate_call('record_replay', {'duration_s': 0.5}).intent.params['duration_s'] == 3.0
+    v = validate_call('record_replay', {'duration_s': 999})
+    assert v.intent.clamp_notes and 'reduced' in v.result_text
+    assert validate_call('record_replay', {'duration_s': '10'}).intent.params['duration_s'] == 10.0
+
+
+def test_record_replay_clamps_speeds_and_count():
+    v = validate_call('record_replay', {'speeds': [0.1, 9, 1.3, 0.7, 1.0, 2.0]})
+    assert v.intent.params['speeds'] == [0.5, 2.0, 1.3, 0.7]   # clamped, capped at 4
+    assert len(v.intent.clamp_notes) == 3
+    assert validate_call('record_replay', {'speeds': 1.3}).intent.params['speeds'] == [1.3]
+    assert validate_call('record_replay', {'speeds': []}).intent.params['speeds'] == [1.0]
+    assert validate_call('record_replay', {'speeds': None}).intent.params['speeds'] == [1.0]
+
+
+def test_record_replay_named_speeds():
+    v = validate_call('record_replay', {'speeds': ['deep', 'normal', 'chipmunk']})
+    assert v.intent.params['speeds'] == [0.7, 1.0, 1.3]
+    assert validate_call('record_replay', {'speeds': 'Chipmunk'}).intent.params['speeds'] == [1.3]
+
+
+@pytest.mark.parametrize('args', [
+    {'duration_s': 'nan'}, {'duration_s': None}, {'duration_s': [5]},
+    {'speeds': ['warp']}, {'speeds': [float('inf')]}, {'speeds': {'a': 1}},
+    {'speeds': [True]}, {'duration_s': 5, 'loud': True},
+])
+def test_record_replay_rejections(args):
+    v = validate_call('record_replay', args)
+    assert v.rejected
+    assert v.intent.behavior_json is None

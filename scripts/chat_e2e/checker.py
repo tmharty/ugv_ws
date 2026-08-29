@@ -5,6 +5,8 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from ugv_interface.msg import Say, Transcript
+from ugv_interface.srv import Record
+import os, wave
 
 class Checker(Node):
     def __init__(self):
@@ -17,6 +19,17 @@ class Checker(Node):
         self.tr_pub = self.create_publisher(Transcript, '/voice/transcript', 10)
         self.create_timer(0.05, self.tick)
         self._last = time.monotonic()
+        self.records = []
+        self.create_service(Record, 'voice/record', self.record_cb)
+    def record_cb(self, req, resp):
+        # Stand-in for the ear: write a short silent wav where asked.
+        self.records.append((req.duration_s, req.path))
+        os.makedirs(os.path.dirname(req.path), exist_ok=True)
+        with wave.open(req.path, 'wb') as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+            w.writeframes(b'\x00\x00' * int(16000 * req.duration_s))
+        resp.success = True; resp.path = req.path; resp.message = 'ok'
+        return resp
     def cmd_cb(self, m):
         self.twists.append((time.monotonic(), m)); self.vx = m.linear.x
     def tick(self):
@@ -111,6 +124,34 @@ def main():
     check('go_to_point asks for confirmation', wait_say(n, lambda m: m.key == 'confirm_go_to_point') is not None)
     n.say('no')
     check('deny cancels navigation', wait_say(n, lambda m: m.key == 'nav_cancelled') is not None)
+
+    # 7b. record_replay: countdown, record service, wav playbacks with speeds
+    n.records.clear(); t_rec = time.monotonic(); n.say('record me and play it back like a chipmunk')
+    check('record: countdown spoken', wait_say(n, lambda m: m.key == 'record_countdown') is not None)
+    t0 = time.monotonic()
+    while not n.records and time.monotonic() - t0 < 12: time.sleep(0.1)
+    check('record: ear service called with clamped duration', n.records and n.records[0][0] == 3.0)
+    wavs = []
+    t0 = time.monotonic()
+    while len(wavs) < 2 and time.monotonic() - t0 < 8:
+        wavs = [m for ts, m in n.says if m.key == 'record_playback_wav']; time.sleep(0.1)
+    check('record: two wav playbacks queued', len(wavs) == 2)
+    check('record: speeds 1.0 then chipmunk 1.3', [round(m.speed_factor, 2) for m in wavs] == [1.0, 1.3])
+    check('record: delete_after only on the last playback', [m.delete_after for m in wavs] == [False, True])
+    check('record: wav path exists until the mouth deletes it', wavs and os.path.exists(wavs[0].wav_path))
+    check('record: model narrates afterwards', any(ts > t_rec and 'done' in m.text.lower() for ts, m in n.says) or wait_say(n, lambda m: 'done' in m.text.lower(), 5.0) is not None)
+    for m in wavs:
+        try: os.unlink(m.wav_path)   # the mouth is not running in this harness
+        except OSError: pass
+
+    # 7c. record_replay refused while moving
+    n.records.clear(); n.say('go forward a little')
+    check('pre: driving', wait_cmd(n, lambda t: t.linear.x > 0.0) is not None)
+    n.say('record me')
+    check('record while moving -> refused', wait_say(n, lambda m: m.key == 'record_refused_moving') is not None)
+    time.sleep(1.0)
+    check('record while moving -> service never called', not n.records)
+    n.say('stop', stop=True); time.sleep(1.5)
 
     # 8. offline fallback: kill the fake daemon (parent shell does it on this marker)
     print('KILL_OLLAMA', flush=True); time.sleep(2.0)
