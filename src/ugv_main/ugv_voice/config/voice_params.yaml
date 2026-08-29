@@ -17,7 +17,7 @@ voice_ear:
     chime_lead_s: 0.3                 # gap after /voice/listening for the mouth's chime
     asr_model: "base.en"
     models_dir: "/home/ws/ugv_ws/models"
-    wake_word_enabled: false          # push-to-talk until PTT is proven
+    wake_word_enabled: true          # push-to-talk until PTT is proven
     wake_word_model: "hey_jarvis"
     wake_word_threshold: 0.6
     record_max_s: 15.0                # voice/record service hard cap (tool clamps to 3–15)
