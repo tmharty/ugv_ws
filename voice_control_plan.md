@@ -349,16 +349,53 @@ the ALSA devices. The capability lives *inside* the owning nodes:
   playbacks, speeds 0.5–2.0. Recordings are temp files, deleted after
   playback — no audio persists (consistent with the privacy stance).
 
+**Status 2026-08-28: code complete, verified on the x86 dev box without a
+mic/speaker; the on-robot audio checks are still open.** What landed:
+
+- `ugv_interface/srv/Record.srv`; `Say.msg` gains `wav_path`,
+  `speed_factor`, `delete_after`.
+- **Ear:** `voice/record` service. The capture runs on the worker thread
+  (the thread that owns the mic, so it never fights the wake-word
+  stream), int16 wav at the device's capture rate, `record_max_s` cap.
+  PTT and wake-word loops both wake on a record job.
+- **Mouth:** wav entries are loaded and tape-deck shifted (`audio_fx.py`,
+  numpy resample so aplay always sees the recorded rate) *at enqueue
+  time* — the temp file can be deleted immediately (`delete_after`) and a
+  safety flush drops a playback exactly like a sentence.
+- **Tool:** `record_replay(duration_s, speeds)` in `tools.py` — clamps
+  3–15 s, ≤4 playbacks, speeds 0.5–2.0; named speeds (`deep`, `normal`,
+  `chipmunk`) accepted for the small model's sake. `chat_node` does the
+  orchestration: countdown → wait for the mouth to fall silent → record
+  service → playbacks. Refused while `behavior/motion_active` (new latched
+  flag from `behavior_ctrl`), while a goal waits in the speak-then-act
+  window, or within 1.5 s of a goal being sent (the flag's catch-up
+  window — an e2e run caught exactly that race). Recordings dir is swept
+  at node start and session end.
+
 **Testing after Phase 3:**
 
-- [ ] "Record me and play it back like a chipmunk" → countdown, 10 s
-      record, chipmunk playback; intelligible end-to-end.
-- [ ] Request during motion → refused with spoken explanation.
-- [ ] Stop word during playback → playback preempted (safety priority
-      still wins the speaker).
-- [ ] After the session: no recording files left on disk.
+- [x] **Unit:** `test_audio_fx.py` (tape-deck length/pitch, clamps, wav
+      IO) + `record_replay` clamps/rejections in `test_tools.py`; 177
+      green in the container.
+- [x] **Plumbing e2e (x86, `scripts/chat_e2e/run.sh`):** "record me and
+      play it back like a chipmunk" → countdown → record service called
+      with the clamped duration → two wav playbacks queued (1.0, 1.3),
+      `delete_after` only on the last → narration; "record me" while
+      driving → `record_refused_moving`, service never called. 32/32.
+- [x] **Mouth with a stub `aplay` (x86):** chipmunk plays ~1/1.3 of the
+      samples at the recorded rate, file deleted once loaded,
+      `/voice/speaking` truthful, safety message preempts an 8 s wav
+      within ~3 s, no files left. 7/7.
+- [ ] **On robot:** "Record me and play it back like a chipmunk" →
+      countdown, record, chipmunk playback; intelligible end-to-end (the
+      real mic/speaker path — camera mic at its native rate).
+- [ ] On robot: request during motion → refused with spoken explanation.
+- [ ] On robot: stop word during playback → playback preempted (safety
+      priority still wins the speaker).
+- [ ] On robot, after the session: no recording files left on disk
+      (`ls /tmp/ugv_voice_recordings` in the container).
 - [ ] Wake/PTT works again immediately after a record cycle (stream state
-      restored).
+      restored) — needs wake-word mode, i.e. the Phase 4 mic.
 
 **Milestone demo:** the chipmunk trick, hands-free, mid-conversation.
 
