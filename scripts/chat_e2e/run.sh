@@ -15,6 +15,9 @@ E="$(cd "$(dirname "$0")" && pwd)"
 LOG="${E}/logs"; mkdir -p "$LOG"
 source /opt/ros/humble/setup.bash; source "$WS/install/setup.bash"
 export ROS_DOMAIN_ID=77
+# behavior_ctrl writes saved points to the tracked map_points.txt; the
+# nav scenario saves a fake point, so restore the file afterwards.
+MP="$WS/map_points.txt"; [ -f "$MP" ] && cp "$MP" "$LOG/map_points.bak"
 python3 "$E/fake_ollama.py" 11435 > "$LOG/ollama.log" 2>&1 & OLL=$!
 ros2 run ugv_tools behavior_ctrl > "$LOG/behavior_ctrl.log" 2>&1 & BC=$!
 ros2 run ugv_voice chat_node --ros-args -p ollama_url:=http://127.0.0.1:11435 \
@@ -25,5 +28,6 @@ python3 -u "$E/checker.py" 2>&1 | while IFS= read -r line; do
   echo "$line"; [ "$line" = KILL_OLLAMA ] && kill $OLL   # the offline scenario
 done
 kill $BC $CH $OLL 2>/dev/null; wait 2>/dev/null
+[ -f "$LOG/map_points.bak" ] && cp "$LOG/map_points.bak" "$MP"
 echo; echo "=== chat_node (tool/estop lines) — full logs in $LOG"
 grep -E "tool call|estop|dropped|clamped|offline|goal|barge|failed" "$LOG/chat_node.log" | head -40
