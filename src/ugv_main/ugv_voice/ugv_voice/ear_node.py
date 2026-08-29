@@ -8,6 +8,12 @@ behind the wake_word_enabled param and becomes the default once PTT is proven.
 Safety path: every transcript is scanned for the stop lexicon HERE, and a hit
 calls behavior/estop directly — the brain node is not in that loop.
 
+voice/record service (record_replay tool): captures N seconds of raw audio
+to a wav on the worker thread — the thread that owns the microphone — so it
+never fights the wake-word stream for the device. Wake/ASR processing, and
+therefore the stop-word scanner, is paused while recording; callers must
+refuse to record while anything is moving.
+
 Heavy deps (sounddevice, faster-whisper) are imported lazily with loud, clear
 log messages when missing, so the node still starts on an image that hasn't
 been rebuilt yet.
@@ -23,6 +29,7 @@ from rclpy.node import Node
 from std_msgs.msg import Bool, Empty
 from std_srvs.srv import Trigger
 from ugv_interface.msg import Transcript
+from ugv_interface.srv import Record
 
 from .intent_schema import contains_stop_word
 
@@ -43,6 +50,7 @@ class EarNode(Node):
         self.declare_parameter('wake_word_enabled', False)
         self.declare_parameter('wake_word_model', 'hey_jarvis')
         self.declare_parameter('wake_word_threshold', 0.6)
+        self.declare_parameter('record_max_s', 15.0)
 
         self.sample_rate = int(self.get_parameter('sample_rate').value)
         self.listen_window_s = float(self.get_parameter('listen_window_s').value)
@@ -55,9 +63,14 @@ class EarNode(Node):
 
         self.create_subscription(Empty, '/voice/listen_once', self.listen_once_callback, 10)
         self.create_subscription(Bool, '/voice/speaking', self.speaking_callback, 10)
+        self.create_service(Record, 'voice/record', self.record_callback)
 
         self._speaking = False
         self._listen_requested = threading.Event()
+        self._record_requested = threading.Event()   # (duration, path) pending
+        self._record_done = threading.Event()
+        self._record_job = None
+        self._record_result = None
         self._asr = None
         self._asr_label = 'none'
         self._capture_rate = None  # resolved on first successful device open
@@ -83,6 +96,31 @@ class EarNode(Node):
             return
         self._listen_requested.set()
 
+    def record_callback(self, request, response):
+        """Hand a fixed-length capture to the worker thread and wait for it.
+        Blocking the executor here is deliberate: nothing else the ear does
+        matters while the mic is recording, and the call is bounded."""
+        max_s = float(self.get_parameter('record_max_s').value)
+        duration = min(max_s, max(0.5, float(request.duration_s)))
+        if self._record_requested.is_set() or self._listen_requested.is_set():
+            response.success = False
+            response.message = 'ear busy'
+            return response
+        self._record_job = (duration, request.path)
+        self._record_result = None
+        self._record_done.clear()
+        self._record_requested.set()
+        if not self._record_done.wait(timeout=duration + 10.0):
+            self._record_requested.clear()
+            response.success = False
+            response.message = 'record timed out'
+            return response
+        ok, path, message = self._record_result
+        response.success = ok
+        response.path = path
+        response.message = message
+        return response
+
     # --- capture ----------------------------------------------------------
 
     def _worker_loop(self):
@@ -101,7 +139,10 @@ class EarNode(Node):
                 if wake_enabled:
                     if not self._wait_for_wake_word():
                         continue
-                elif not self._listen_requested.wait(timeout=0.5):
+                elif not self._wait_for_trigger(0.5):
+                    continue
+                if self._record_requested.is_set():
+                    self._run_record_job()
                     continue
                 audio = self._record_utterance()
                 if audio is not None:
@@ -110,6 +151,48 @@ class EarNode(Node):
                 self.get_logger().error(f'listen cycle failed: {e}')
             finally:
                 self._listen_requested.clear()
+
+    def _wait_for_trigger(self, timeout):
+        """PTT mode: wake on either a listen request or a record job."""
+        return (self._listen_requested.wait(timeout=timeout)
+                or self._record_requested.is_set())
+
+    def _run_record_job(self):
+        duration, path = self._record_job
+        try:
+            self._record_result = self._record_fixed(duration, path)
+        except Exception as e:
+            self._capture_rate = None
+            self._record_result = (False, '', 'record failed: %s' % e)
+            self.get_logger().error('record failed: %s' % e)
+        finally:
+            self._record_requested.clear()
+            self._record_done.set()
+
+    def _record_fixed(self, duration, path):
+        """Capture exactly `duration` seconds to a 16-bit mono wav at the
+        device's capture rate (no resampling — playback keeps the rate)."""
+        import numpy as np
+        import sounddevice as sd
+        from .audio_fx import write_wav_mono16
+
+        device = self._resolve_device(sd)
+        stream, capture_rate = self._open_input_stream(sd, device, 'int16', 0.05)
+        block = int(capture_rate * 0.05)
+        total = int(capture_rate * duration)
+        chunks, got = [], 0
+        self.get_logger().info('recording %.1f s to %s' % (duration, path))
+        with stream:
+            while got < total:
+                data, _overflow = stream.read(min(block, total - got))
+                mono = np.ascontiguousarray(data[:, 0])
+                chunks.append(mono.copy())
+                got += len(mono)
+        pcm = np.concatenate(chunks).astype(np.int16)
+        os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+        write_wav_mono16(path, pcm.tobytes(), capture_rate)
+        self.get_logger().info('recorded %d samples at %d Hz' % (len(pcm), capture_rate))
+        return (True, path, 'ok')
 
     def _record_utterance(self):
         """Record until trailing silence after speech, capped at the listen
@@ -308,7 +391,8 @@ class EarNode(Node):
         except ImportError as e:
             self.get_logger().error(
                 f'wake word unavailable ({e}) — falling back to push-to-talk')
-            self._listen_requested.wait()
+            while rclpy.ok() and not self._wait_for_trigger(0.5):
+                pass
             return True
 
         if not hasattr(self, '_wake_model'):
@@ -325,8 +409,8 @@ class EarNode(Node):
 
         with stream:
             while rclpy.ok():
-                if self._listen_requested.is_set():
-                    return True  # PTT still works in wake-word mode
+                if self._listen_requested.is_set() or self._record_requested.is_set():
+                    return True  # PTT and record jobs still work in wake-word mode
                 data, _ = stream.read(block)
                 if self._speaking:
                     continue  # don't wake on our own voice

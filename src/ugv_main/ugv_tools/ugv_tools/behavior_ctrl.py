@@ -25,11 +25,13 @@ import time
 import rclpy
 from rclpy.action import ActionClient, ActionServer
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile
 
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Odometry
 from nav2_msgs.action import NavigateToPose
+from std_msgs.msg import Bool
 from std_srvs.srv import Trigger
 from ugv_interface.action import Behavior
 
@@ -68,6 +70,15 @@ class BehaviorController(Node):
         # Legacy fire-and-forget fallback for pub_nav_point (use_nav2_action:=false)
         self.goal_publisher = self.create_publisher(PoseStamped, '/goal_pose', 10)
         self.estop_service = self.create_service(Trigger, 'behavior/estop', self.estop_callback)
+        # Latched "is anything moving or queued to move" flag for callers
+        # that must not act while the robot moves (e.g. the voice
+        # record_replay tool, whose recording blinds the stop-word scanner).
+        self.motion_active_pub = self.create_publisher(
+            Bool, 'behavior/motion_active',
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self._executing = False
+        self._motion_active_last = None
+        self.create_timer(0.1, self._publish_motion_active)
 
         self.nav_action_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         self.nav_goal_handle = None
@@ -245,6 +256,9 @@ class BehaviorController(Node):
             goal_handle.abort()
             result.result = False
         else:
+            # Flag motion before the caller learns the goal was taken, so
+            # "is anything moving?" is never briefly wrong right after a send.
+            self._publish_motion_active()
             goal_handle.succeed()
             result.result = True
         return result
@@ -281,6 +295,17 @@ class BehaviorController(Node):
     def _publish_stop(self):
         self.velocity_publisher.publish(Twist())
 
+    def _motion_active(self):
+        with self.nav_goal_lock:
+            nav = self.nav_goal_handle is not None
+        return self._executing or nav or not self.command_queue.empty()
+
+    def _publish_motion_active(self):
+        active = self._motion_active()
+        if active != self._motion_active_last:
+            self._motion_active_last = active
+            self.motion_active_pub.publish(Bool(data=active))
+
     def _cancel_nav_goal(self):
         with self.nav_goal_lock:
             handle = self.nav_goal_handle
@@ -299,6 +324,13 @@ class BehaviorController(Node):
             self.command_queue.task_done()
 
     def execute_behavior(self, command):
+        self._executing = True
+        try:
+            self._execute_behavior(command)
+        finally:
+            self._executing = False
+
+    def _execute_behavior(self, command):
         command_type, data_value, gen = command
         if gen != self._stop_gen:
             self.get_logger().warn(f'Skipping {command_type}: enqueued before a stop request')

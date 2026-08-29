@@ -13,6 +13,11 @@ brief gap between sentences can't flap it False and re-arm the ear mid-reply.
 
 PRIORITY_SAFETY messages flush both queues and kill the current aplay so
 "Stopping." is never stuck behind chatter.
+
+Wav entries (Say.wav_path, from the record_replay tool) ride the same queue:
+the file is loaded and tape-deck speed-shifted (audio_fx) at enqueue time,
+so the temp recording can be deleted immediately and a safety flush drops
+a playback exactly like a sentence.
 """
 
 import os
@@ -26,6 +31,8 @@ from rclpy.node import Node
 
 from std_msgs.msg import Bool
 from ugv_interface.msg import Say
+
+from .audio_fx import read_wav_mono16, tape_deck
 
 
 class MouthNode(Node):
@@ -83,8 +90,14 @@ class MouthNode(Node):
         if msg.priority == Say.PRIORITY_SAFETY:
             self._flush_pipeline()
             self._kill_current()
-        if not msg.text.strip():
+        if msg.wav_path:
+            item = self._load_wav_item(msg)
+            if item is None:
+                return
+        elif not msg.text.strip():
             return
+        else:
+            item = None
         with self._state_lock:
             if self._grace_timer is not None:
                 self._grace_timer.cancel()
@@ -95,7 +108,27 @@ class MouthNode(Node):
             epoch = self._epoch
         if announce:
             self._publish_speaking(True)
-        self._text_queue.put((epoch, msg.text))
+        self._text_queue.put((epoch, msg.text, item))
+
+    def _load_wav_item(self, msg):
+        """Read + speed-shift a wav now, so the file can go away. Returns a
+        ('pcm', bytes, rate) item or None (logged) on failure."""
+        try:
+            pcm, rate = read_wav_mono16(msg.wav_path)
+            speed = float(msg.speed_factor) or 1.0
+            pcm = tape_deck(pcm, speed)
+            self.get_logger().info('queued wav %s at x%g (%.1f s)' % (
+                msg.wav_path, speed, len(pcm) / 2.0 / rate))
+            return ('pcm', pcm, rate)
+        except Exception as e:
+            self.get_logger().error('cannot play %s: %s' % (msg.wav_path, e))
+            return None
+        finally:
+            if msg.delete_after:
+                try:
+                    os.unlink(msg.wav_path)
+                except OSError:
+                    pass
 
     def _flush_pipeline(self):
         """Safety flush: invalidate everything queued in both stages so only
@@ -130,15 +163,15 @@ class MouthNode(Node):
             if entry is None:
                 self._audio_queue.put(None)
                 return
-            epoch, text = entry
+            epoch, text, item = entry   # item pre-rendered for wav entries
             if self._stale(epoch):
                 self._finish_item()
                 continue
-            item = None
-            try:
-                item = self._synthesize(text)
-            except Exception as e:
-                self.get_logger().error(f'TTS failed: {e}')
+            if item is None:
+                try:
+                    item = self._synthesize(text)
+                except Exception as e:
+                    self.get_logger().error(f'TTS failed: {e}')
             if item is None:
                 self._finish_item()
                 continue

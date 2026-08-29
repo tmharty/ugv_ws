@@ -22,6 +22,7 @@ find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/MapSave.srv"
+  "srv/Record.srv"
   "action/Behavior.action"
   "msg/Transcript.msg"
   "msg/Say.msg"

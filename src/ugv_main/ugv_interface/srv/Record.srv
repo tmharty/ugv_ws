@@ -1,0 +1,10 @@
+# Record raw microphone audio for duration_s seconds into a wav at `path`
+# (voice_ear's voice/record service). The ear pauses wake/ASR processing
+# for the duration — the stop-word scanner is down while recording, so
+# callers must refuse this while any motion is active.
+float32 duration_s
+string path
+---
+bool success
+string path        # the file actually written (empty on failure)
+string message
