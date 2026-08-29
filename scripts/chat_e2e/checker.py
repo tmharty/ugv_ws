@@ -1,11 +1,16 @@
 """Drives chat_node + behavior_ctrl through the Phase 2 scenarios."""
-import math, sys, time, threading
+import sys, time, threading
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from ugv_interface.msg import Say, Transcript
 from ugv_interface.srv import Record
+from geometry_msgs.msg import PoseStamped
+from nav2_msgs.action import NavigateToPose
+from rclpy.action import ActionServer, CancelResponse
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 import os, wave
 
 class Checker(Node):
@@ -21,6 +26,22 @@ class Checker(Node):
         self._last = time.monotonic()
         self.records = []
         self.create_service(Record, 'voice/record', self.record_cb)
+        # Fake Nav2: accepts goals, sits on them until cancelled.
+        self.nav_goals, self.nav_cancels = [], []
+        self.pose_pub = self.create_publisher(PoseStamped, '/robot_pose', 10)
+        self.nav_server = ActionServer(self, NavigateToPose, 'navigate_to_pose',
+                                       execute_callback=self.nav_execute,
+                                       callback_group=ReentrantCallbackGroup(),
+                                       cancel_callback=lambda gh: (self.nav_cancels.append(time.monotonic()), CancelResponse.ACCEPT)[1])
+    def nav_execute(self, gh):
+        self.nav_goals.append(time.monotonic())
+        while not gh.is_cancel_requested and time.monotonic() - self.nav_goals[-1] < 20:
+            time.sleep(0.05)
+        if gh.is_cancel_requested:
+            gh.canceled()
+        else:
+            gh.succeed()
+        return NavigateToPose.Result()
     def record_cb(self, req, resp):
         # Stand-in for the ear: write a short silent wav where asked.
         self.records.append((req.duration_s, req.path))
@@ -39,6 +60,8 @@ class Checker(Node):
         o.header.frame_id = 'odom'; o.child_frame_id = 'base_footprint'
         o.pose.pose.position.x = self.x; o.pose.pose.orientation.w = 1.0
         self.odom_pub.publish(o)
+        p = PoseStamped(); p.header.frame_id = 'map'; p.pose.orientation.w = 1.0
+        self.pose_pub.publish(p)
     def say(self, text, stop=False):
         m = Transcript(); m.text = text; m.stop_word = stop; self.tr_pub.publish(m)
 
@@ -67,7 +90,8 @@ def wait_cmd(n, pred, timeout=8.0):
 
 def main():
     rclpy.init(); n = Checker()
-    th = threading.Thread(target=rclpy.spin, args=(n,), daemon=True); th.start()
+    ex = MultiThreadedExecutor(num_threads=4); ex.add_node(n)
+    th = threading.Thread(target=ex.spin, daemon=True); th.start()
     time.sleep(3.0)   # let behavior_ctrl/chat_node discover each other
 
     # 1. plain conversation
@@ -124,6 +148,24 @@ def main():
     check('go_to_point asks for confirmation', wait_say(n, lambda m: m.key == 'confirm_go_to_point') is not None)
     n.say('no')
     check('deny cancels navigation', wait_say(n, lambda m: m.key == 'nav_cancelled') is not None)
+
+    # 7a. Nav2 cancellation through the estop path (Phase 4 check)
+    n.say('save point a')
+    check('nav: save_point acked', wait_say(n, lambda m: m.key == 'ack_save_point') is not None)
+    time.sleep(1.0)
+    n.say('go to point a')
+    check('nav: confirmation asked', wait_say(n, lambda m: m.key == 'confirm_go_to_point') is not None)
+    n.say('yes')
+    check('nav: confirmed', wait_say(n, lambda m: m.key == 'nav_confirmed') is not None)
+    t0 = time.monotonic()
+    while not n.nav_goals and time.monotonic() - t0 < 8: time.sleep(0.05)
+    check('nav: NavigateToPose goal reached the (fake) Nav2 server', bool(n.nav_goals))
+    time.sleep(0.5)
+    n.say('stop', stop=True); t_stop = time.monotonic()
+    t0 = time.monotonic()
+    while not n.nav_cancels and time.monotonic() - t0 < 3: time.sleep(0.02)
+    check('nav: stop word cancels the Nav2 goal (<1 s)', n.nav_cancels and n.nav_cancels[-1] - t_stop < 1.0)
+    time.sleep(1.0)
 
     # 7b. record_replay: countdown, record service, wav playbacks with speeds
     n.records.clear(); t_rec = time.monotonic(); n.say('record me and play it back like a chipmunk')

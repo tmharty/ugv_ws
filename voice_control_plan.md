@@ -415,11 +415,62 @@ wake word (until then `hey_jarvis`); re-run `audio_check.sh` on the array
 and update `voice_params.yaml` device names; DOA sanity check from three
 known bearings (front/back distinguished) for the future gimbal project.
 
-**Testing:** 10/10 wake at 3 m quiet, ≥8/10 with TV; overnight
-false-trigger soak (<1/hr; a false wake alone must never move the robot —
-motion still needs a valid transcript *and* a tool dispatch); barge-in
-"STOP" during `go_to_point` cancels Nav2 and interrupts speech;
-self-hearing test (no transcripts of its own TTS); full regression.
+**Status 2026-08-28: software side complete and verified on x86; every
+hardware item (the array itself, far-field/false-trigger/self-hearing
+tests, DOA, device names) waits for the ReSpeaker.** What landed:
+
+- **`vad.py`:** streaming Silero VAD v6 — the model faster-whisper already
+  ships, no download — with a stateful 512-sample adapter, an energy-gate
+  fallback, and a pure `Endpointer` (min-speech / trailing-silence / max /
+  pre-roll) + `SegmentStream`. The ear's listen window now endpoints on
+  Silero instead of RMS (`vad_backend`, `vad_threshold`, `min_speech_s`,
+  `pre_roll_s`; `silence_after_speech_s` is the tuning knob).
+- **Listening chime:** ear publishes `/voice/listening`; the mouth plays a
+  180 ms two-note chime (`audio_fx.chime`, `chime_enabled`/`chime_volume`)
+  in the ear's `chime_lead_s` gap before capture opens, never over speech.
+- **Half-duplex mute:** wake detection and PTT stay suppressed while
+  `/voice/speaking`; the stop watch can run through speech
+  (`stop_watch_while_speaking`) but is **off by default until the AEC
+  mic** — the camera mic hears the robot's own "Stopping.".
+- **Continuous stop detection** — without a custom "stop" wake model
+  (openWakeWord ships none and training needs a GPU pipeline): the ear's
+  new *monitor* keeps one stream open whenever the wake word is enabled or
+  `behavior/motion_active` is True, runs openWakeWord on each 80 ms frame,
+  and segments speech with Silero; each ≤2 s segment is transcribed at
+  once on a side thread and scanned for the stop lexicon → `behavior/estop`
+  + a `stop_word` Transcript (so the chat node barges in). Verified
+  offline in the container: espeak "robot stop" → Silero → Whisper → hit;
+  "hello robot" → no hit.
+- **Self-hearing guard:** chat_node rate-limits the spoken "Stopping."
+  (`estop_ack_cooldown_s`); the estop itself and the mouth flush always
+  fire, so an echoed stop word can't loop the ack forever.
+- **Nav2 cancellation through the estop path:** `save point a` → `go to
+  point a` → "yes" → NavigateToPose goal → stop word → cancel request at
+  the (fake) Nav2 server within 1 s. In `scripts/chat_e2e` (37/37).
+- Custom wake word: not attempted (`hey_jarvis` stays).
+
+**Testing:**
+
+- [x] Unit: `test_vad.py` (Endpointer state machine, energy gate,
+      SegmentStream, chime, Silero streaming = batch, espeak speech
+      detected, full stop-watch chain to the lexicon). 188 green in the
+      container.
+- [x] Barge-in "STOP" during `go_to_point` cancels Nav2 (x86 harness,
+      fake Nav2 server). Interrupting speech uses the same
+      PRIORITY_SAFETY flush proven in Phase 3's mouth check.
+- [ ] **ReSpeaker array:** buy, `audio_check.sh` on it, update
+      `voice_params.yaml` device names, move speech to its 3.5 mm jack
+      (AEC only cancels its own output), measure mount yaw when mounted.
+- [ ] Then flip `stop_watch_while_speaking: true` and run the
+      self-hearing test (no transcripts / no stop hits of its own TTS).
+- [ ] 10/10 wake at 3 m quiet, ≥8/10 with TV; overnight false-trigger
+      soak (<1/hr; a false wake alone must never move the robot — motion
+      still needs a valid transcript *and* a tool dispatch).
+- [ ] On robot: stop watch latency while driving (say "stop" mid-move →
+      `/cmd_vel` zero; expect ≈1 s: 0.25 s trailing silence + ASR).
+- [ ] DOA sanity check from three known bearings (front/back
+      distinguished) for the future gimbal project.
+- [ ] Full regression on the robot (Phase 2/3 open items too).
 
 ---
 

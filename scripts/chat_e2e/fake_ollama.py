@@ -32,6 +32,8 @@ def script(req):
         return [chunk('Say something! ', tool_calls=[call('record_replay', duration_s=3, speeds=[1.0, 'chipmunk'])])]
     if 'battery' in t:
         return [chunk(tool_calls=[call('battery_status')])]
+    if 'save' in t:
+        return [chunk(tool_calls=[call('save_point', point='A')])]
     if 'point' in t:
         return [chunk(tool_calls=[call('go_to_point', point='A')])]
     return [chunk('Hello there, '), chunk('I am a robot.')]
