@@ -122,6 +122,7 @@ class ChatNode(Node):
         self._generation = 0        # bumped on barge-in; worker drops stale work
         self._stop_gen = 0          # bumped on any estop; drops pending goals
         self._voltage = None
+        self._turn_text = None      # utterance of the turn in progress (record gate)
         self._motion_active = False
         self._pending_goals = 0     # speak-then-act goals not yet sent
         self._last_goal_sent = 0.0  # monotonic; grace until motion_active catches up
@@ -275,6 +276,7 @@ class ChatNode(Node):
             self._finish_turn(generation)
             return
 
+        self._turn_text = text   # gates record_replay in _run_tools
         try:
             self._loop.run(
                 text,
@@ -360,7 +362,8 @@ class ChatNode(Node):
         the rest are refused as compound) and dispatch them. Returns the
         result texts the model narrates. Called from the worker thread."""
         results = []
-        for call, validated in zip(calls, tools.validate_round(calls)):
+        validated_calls = tools.validate_round(calls, user_text=self._turn_text)
+        for call, validated in zip(calls, validated_calls):
             self.get_logger().info('tool call %s(%r) -> %s%s' % (
                 call.name, call.arguments, validated.intent.name,
                 ' REJECTED: %s' % validated.intent.rejected_reason
@@ -374,7 +377,8 @@ class ChatNode(Node):
             self.get_logger().warn('clamped: %s' % note)
 
         if validated.rejected:
-            self._say_key(validated.ack_key)
+            if validated.ack_key:      # None = silent refusal
+                self._say_key(validated.ack_key)
             return validated.result_text
 
         if intent.is_stop:

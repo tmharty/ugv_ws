@@ -20,6 +20,7 @@ speeds) live here.
 """
 
 import json
+import re
 from dataclasses import dataclass
 
 from . import intent_schema
@@ -37,6 +38,28 @@ SPEED_ALIASES = {'deep': 0.7, 'slow': 0.7, 'low': 0.7, 'normal': 1.0,
 # Per-tool-round cap on the number of calls we will even look at; anything
 # beyond it is dropped with a refusal. One utterance is one action.
 MAX_CALLS_PER_ROUND = 1
+
+# record_replay is gated on the user's own words: a small model reads
+# "tell me a joke" as a cue for the "funny" tool, and a spurious recording
+# blinds the stop-word scanner for up to 15 s. If the utterance is known
+# and mentions none of these, the call is refused silently and the model is
+# told to answer in prose. Substring match on the normalized text.
+RECORD_REQUEST_WORDS = (
+    'record', 'play it back', 'play that back', 'play back', 'playback',
+    'play my voice', 'say it back', 'say that back', 'repeat after me',
+    'repeat what i', 'repeat me', 'copy me', 'copy what i', 'echo',
+    'my voice', 'hear myself', 'chipmunk', 'parrot',
+)
+_RECORD_NORM = re.compile(r"[^a-z' ]+")
+
+
+def record_requested(text):
+    """True if the user's utterance plausibly asks to be recorded."""
+    if not text:
+        return False
+    norm = ' '.join(_RECORD_NORM.sub(' ', text.lower()).split())
+    padded = ' %s ' % norm
+    return any(' %s' % w in padded for w in RECORD_REQUEST_WORDS)
 
 
 def _schema(name, description, properties=None, required=()):
@@ -110,11 +133,14 @@ TOOL_SCHEMAS = [
     ),
     _schema(
         'record_replay',
-        'Record the user\'s voice for a few seconds (3 to 15), then play it '
-        'back, once per listed speed: 1.0 is as recorded, 0.7 is deep and '
-        'slow, 1.3 is chipmunk. Use for "record me", "play it back funny", '
-        '"say it back like a chipmunk". Up to 4 playbacks. Not possible '
-        'while the robot is moving.',
+        'Record the user\'s own voice with the microphone for a few seconds '
+        '(3 to 15), then play the recording back, once per listed speed: '
+        '1.0 is as recorded, 0.7 is deep and slow, 1.3 is chipmunk. ONLY '
+        'when the user explicitly asks to be recorded or to hear their own '
+        'voice played back ("record me", "record my voice", "play my voice '
+        'back like a chipmunk"). Never for jokes, stories, songs, questions '
+        'or anything else — answer those in words with no tool. Up to 4 '
+        'playbacks. Not possible while the robot is moving.',
         {
             'duration_s': {'type': 'number',
                            'description': 'Seconds to record, 3 to 15. Default 5.'},
@@ -227,6 +253,7 @@ def parse_tool_calls(message):
 
 
 def _reject(tool, reason, reply_key='unknown', result_text=None):
+    """reply_key None = refuse silently (the model just answers in prose)."""
     intent = ValidatedIntent(name='unknown', reply_key=reply_key,
                              rejected_reason=reason)
     return ValidatedTool(tool=str(tool), intent=intent,
@@ -234,8 +261,12 @@ def _reject(tool, reason, reply_key='unknown', result_text=None):
                          'Refused: %s. Tell the user you cannot do that.' % reason)
 
 
-def validate_call(name, arguments):
+def validate_call(name, arguments, user_text=None):
     """Validate one proposed tool call. Never raises.
+
+    ``user_text`` is the utterance that produced the call; when given, a
+    record_replay call the user did not ask for is refused (see
+    RECORD_REQUEST_WORDS).
 
     Returns a ValidatedTool whose ``intent`` is the intent_schema result.
     Anything malformed carries a rejected_reason and no behavior_json.
@@ -251,6 +282,11 @@ def validate_call(name, arguments):
         return _reject(name, 'unexpected_arguments:%s' % sorted(extra))
 
     if name == 'record_replay':
+        if user_text is not None and not record_requested(user_text):
+            return _reject(
+                'record_replay', 'not_requested', reply_key=None,
+                result_text='Refused: the user did not ask to be recorded. '
+                            'Answer them in words, without calling any tool.')
         return _validate_record_replay(arguments)
 
     raw = _to_raw_intent(name, arguments)
@@ -388,11 +424,12 @@ def _result_text(name, intent):
     return text
 
 
-def validate_round(tool_calls):
+def validate_round(tool_calls, user_text=None):
     """Validate a whole tool_calls list from one model message.
 
     Only the first MAX_CALLS_PER_ROUND calls are honoured; the rest are
-    refused as compound commands (one thing at a time).
+    refused as compound commands (one thing at a time). ``user_text`` is
+    passed through to validate_call.
     """
     out = []
     for i, call in enumerate(tool_calls):
@@ -401,5 +438,5 @@ def validate_round(tool_calls):
                                reply_key='one_at_a_time',
                                result_text='Refused: one action per request.'))
             continue
-        out.append(validate_call(call.name, call.arguments))
+        out.append(validate_call(call.name, call.arguments, user_text))
     return out

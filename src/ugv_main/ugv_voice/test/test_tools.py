@@ -362,3 +362,53 @@ def test_record_replay_rejections(args):
     v = validate_call('record_replay', args)
     assert v.rejected
     assert v.intent.behavior_json is None
+
+
+# --- record_replay request gate (issue: "tell me a joke" fired the tool) -----
+
+@pytest.mark.parametrize('text', [
+    'Can you record my voice?',
+    'record me and play it back like a chipmunk',
+    'Say it back to me, please.',
+    'Repeat after me: hello robot',
+    'I want to hear myself',
+])
+def test_record_requested_true(text):
+    assert tools.record_requested(text)
+
+
+@pytest.mark.parametrize('text', [
+    'Can you tell me a joke?',
+    'Tell me a funny story',
+    'Sing a song',
+    'What is your battery at?',
+    '',
+    None,
+])
+def test_record_requested_false(text):
+    assert not tools.record_requested(text)
+
+
+def test_record_replay_refused_when_not_requested_is_silent():
+    v = validate_call('record_replay', {'duration_s': 5},
+                      user_text='Can you tell me a joke?')
+    assert v.rejected
+    assert v.intent.rejected_reason == 'not_requested'
+    assert v.ack_key is None                     # nothing is spoken
+    assert 'without calling any tool' in v.result_text
+    # validate_round passes the utterance through
+    r = tools.validate_round([tools.ToolCall('record_replay', {})],
+                             user_text='tell me a joke')
+    assert r[0].rejected and r[0].intent.rejected_reason == 'not_requested'
+
+
+def test_record_replay_allowed_when_requested_or_text_unknown():
+    assert not validate_call('record_replay', {}, user_text='record my voice').rejected
+    assert not validate_call('record_replay', {}).rejected   # no text = no gate
+
+
+def test_record_replay_description_is_strict():
+    desc = next(s for s in tools.TOOL_SCHEMAS
+                if s['function']['name'] == 'record_replay')['function']['description']
+    assert 'ONLY' in desc and 'jokes' in desc
+    assert 'funny' not in desc

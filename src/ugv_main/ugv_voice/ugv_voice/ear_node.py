@@ -23,6 +23,14 @@ to a wav on the worker thread — the thread that owns the microphone — so it
 never fights the monitor stream for the device. The stop watch is
 necessarily down while recording; callers refuse to record while moving.
 
+Capture format: every stream (listen, monitor, record) is opened the same
+way — mono, CAPTURE_DTYPE, at a rate PROBED with sd.check_input_settings
+for that exact configuration. Raw ALSA hw: devices do no rate conversion
+and a USB mic's usable rates can depend on the sample format, so guessing
+(open at 16 kHz, else the device's "default" rate) fails with
+paInvalidSampleRate on the UGV Beast's camera mic. Consumers that want
+int16 (openWakeWord, the wav file) convert in software.
+
 Heavy deps (sounddevice, faster-whisper, openwakeword) are imported lazily
 with loud, clear log messages when missing, so the node still starts on an
 image that hasn't been rebuilt yet.
@@ -47,6 +55,11 @@ from .intent_schema import contains_stop_word
 from .vad import SILERO_RATE, SegmentStream, make_vad
 
 FRAME_S = 0.08   # openWakeWord wants 80 ms frames at 16 kHz
+CAPTURE_DTYPE = 'float32'   # one format for every stream (see module doc)
+# Rates tried, in order, after the configured sample_rate; the device's own
+# reported default is appended last. First one the hardware accepts wins.
+CAPTURE_RATE_CANDIDATES = (48000, 44100, 32000, 24000, 22050, 8000)
+CAPTURE_FAIL_BACKOFF_MAX_S = 5.0
 
 
 class EarNode(Node):
@@ -114,7 +127,8 @@ class EarNode(Node):
         self._asr_label = 'none'
         self._vad = None
         self._wake_model = None
-        self._capture_rate = None  # resolved on first successful device open
+        self._capture_rates = {}   # (device, dtype) -> probed working rate
+        self._capture_failures = 0  # consecutive worker-cycle failures (backoff)
         self._stop_queue = queue.Queue(maxsize=4)
         self._stop_hits = 0
 
@@ -203,9 +217,17 @@ class EarNode(Node):
                 else:
                     self._listen_requested.wait(timeout=0.2)
             except Exception as e:
-                self.get_logger().error(f'listen cycle failed: {e}')
                 self._listen_requested.clear()
-                time.sleep(0.5)
+                self._capture_failures += 1
+                # Exponential backoff so a mic that refuses to open does not
+                # spam the log twice a second forever.
+                delay = min(CAPTURE_FAIL_BACKOFF_MAX_S,
+                            0.5 * 2 ** (self._capture_failures - 1))
+                self.get_logger().error(
+                    f'listen cycle failed: {e} — retrying in {delay:.1f} s')
+                time.sleep(delay)
+            else:
+                self._capture_failures = 0
 
     def _stop_watch_wanted(self):
         return ((self.stop_watch_during_motion and self._motion_active)
@@ -237,7 +259,7 @@ class EarNode(Node):
         self.get_logger().info('listening…')
         utterance = None
         try:
-            stream, capture_rate = self._open_input_stream(sd, device, 'float32', FRAME_S)
+            stream, capture_rate = self._open_input_stream(sd, device, FRAME_S)
             block = int(capture_rate * FRAME_S)
             deadline = time.monotonic() + self.listen_window_s + 1.0
             with stream:
@@ -252,7 +274,7 @@ class EarNode(Node):
                     if done:
                         break
         except Exception as e:
-            self._capture_rate = None  # device may have changed — re-probe
+            self._forget_capture_rate()  # device may have changed — re-probe
             self.get_logger().error(
                 f'mic capture failed on device {device!r}: {e} — devices: '
                 f'{[d["name"] for d in sd.query_devices()]}')
@@ -272,7 +294,7 @@ class EarNode(Node):
         try:
             self._record_result = self._record_fixed(duration, path)
         except Exception as e:
-            self._capture_rate = None
+            self._forget_capture_rate()
             self._record_result = (False, '', 'record failed: %s' % e)
             self.get_logger().error('record failed: %s' % e)
         finally:
@@ -287,7 +309,7 @@ class EarNode(Node):
         from .audio_fx import write_wav_mono16
 
         device = self._resolve_device(sd)
-        stream, capture_rate = self._open_input_stream(sd, device, 'int16', 0.05)
+        stream, capture_rate = self._open_input_stream(sd, device, 0.05)
         block = int(capture_rate * 0.05)
         total = int(capture_rate * duration)
         chunks, got = [], 0
@@ -298,7 +320,7 @@ class EarNode(Node):
                 mono = np.ascontiguousarray(data[:, 0])
                 chunks.append(mono.copy())
                 got += len(mono)
-        pcm = np.concatenate(chunks).astype(np.int16)
+        pcm = self._to_int16(np, np.concatenate(chunks))
         os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
         write_wav_mono16(path, pcm.tobytes(), capture_rate)
         self.get_logger().info('recorded %d samples at %d Hz' % (len(pcm), capture_rate))
@@ -322,7 +344,7 @@ class EarNode(Node):
             self._vad, min_speech_s=0.15, silence_after_speech_s=0.25,
             max_utterance_s=float(self.get_parameter('stop_watch_max_segment_s').value),
             pre_roll_s=0.2)
-        stream, capture_rate = self._open_input_stream(sd, device, 'int16', FRAME_S)
+        stream, capture_rate = self._open_input_stream(sd, device, FRAME_S)
         block = int(capture_rate * FRAME_S)
         watching = False
         with stream:
@@ -333,11 +355,11 @@ class EarNode(Node):
                 if not self.wake_enabled and not want_stop:
                     return
                 data, _ = stream.read(block)
-                frame = self._resample(np, np.squeeze(data), capture_rate, self.sample_rate)
+                frame = self._resample(np, data[:, 0], capture_rate, self.sample_rate)
                 speaking = self._speaking
 
                 if wake is not None and not speaking:   # half-duplex mute
-                    scores = wake.predict(frame)
+                    scores = wake.predict(self._to_int16(np, frame))
                     if any(s >= threshold for s in scores.values()):
                         self.get_logger().info('wake word detected')
                         wake.reset()
@@ -349,7 +371,7 @@ class EarNode(Node):
                         segmenter.reset()
                         watching = True
                         self.get_logger().info('stop watch on')
-                    for ev, seg in segmenter.feed(frame.astype(np.float32) / 32768.0):
+                    for ev, seg in segmenter.feed(frame):
                         if ev in ('end', 'timeout'):
                             try:
                                 self._stop_queue.put_nowait(seg)
@@ -399,37 +421,66 @@ class EarNode(Node):
                 f'capture_device {name!r} not found — using system default')
             return None
 
-    def _open_input_stream(self, sd, device, dtype, block_s):
-        """Open a mono input stream at sample_rate; if the hardware refuses
-        (raw hw: ALSA devices do no rate conversion — USB webcam mics are
-        often 44.1/48 kHz only), reopen at the device's native rate. The
-        working rate is cached so later cycles skip the failed open. Returns
-        (unstarted stream, actual capture rate); callers resample to
-        sample_rate."""
-        if self._capture_rate is not None:
-            block = int(self._capture_rate * block_s)
-            return (sd.InputStream(device=device, channels=1, dtype=dtype,
-                                   samplerate=self._capture_rate,
-                                   blocksize=block),
-                    self._capture_rate)
-        try:
-            block = int(self.sample_rate * block_s)
-            stream = sd.InputStream(device=device, channels=1, dtype=dtype,
-                                    samplerate=self.sample_rate,
-                                    blocksize=block)
-            self._capture_rate = self.sample_rate
-            return stream, self.sample_rate
-        except sd.PortAudioError:
-            native = int(sd.query_devices(device, kind='input')
-                         ['default_samplerate'])
-            self.get_logger().warn(
-                f'device {device!r} cannot capture at {self.sample_rate} Hz '
-                f'— capturing at {native} Hz and resampling')
-            block = int(native * block_s)
-            stream = sd.InputStream(device=device, channels=1, dtype=dtype,
-                                    samplerate=native, blocksize=block)
-            self._capture_rate = native
-            return stream, native
+    def _open_input_stream(self, sd, device, block_s):
+        """Open a mono CAPTURE_DTYPE input stream at a rate the device has
+        been verified to accept for exactly that configuration. Returns
+        (unstarted stream, capture rate); callers resample to sample_rate.
+
+        Raw hw: ALSA devices do no rate conversion, and which rates a USB
+        mic accepts can depend on the sample format and channel count, so
+        the rate is probed with check_input_settings (same device, dtype,
+        channels) rather than assumed from the device's advertised default.
+        The result is cached per (device, dtype) until an open fails."""
+        key = (device, CAPTURE_DTYPE)
+        rate = self._capture_rates.get(key)
+        if rate is None:
+            rate = self._probe_capture_rate(sd, device, CAPTURE_DTYPE)
+            self._capture_rates[key] = rate
+        block = int(rate * block_s)
+        stream = sd.InputStream(device=device, channels=1, dtype=CAPTURE_DTYPE,
+                                samplerate=rate, blocksize=block)
+        return stream, rate
+
+    def _probe_capture_rate(self, sd, device, dtype):
+        """First rate the device accepts for (mono, dtype), trying
+        sample_rate first, then CAPTURE_RATE_CANDIDATES, then the device's
+        advertised default. Raises RuntimeError if none works."""
+        info = sd.query_devices(device, kind='input')
+        default = int(info['default_samplerate'])
+        candidates = []
+        for r in (self.sample_rate, *CAPTURE_RATE_CANDIDATES, default):
+            if r not in candidates:
+                candidates.append(int(r))
+        errors = []
+        for r in candidates:
+            try:
+                sd.check_input_settings(device=device, channels=1,
+                                        dtype=dtype, samplerate=r)
+            except Exception as e:      # PortAudioError / ValueError
+                errors.append('%d Hz: %s' % (r, e))
+                continue
+            if r != self.sample_rate:
+                self.get_logger().warn(
+                    'device %r (%s) cannot capture %s at %d Hz — capturing '
+                    'at %d Hz and resampling' % (device, info['name'], dtype,
+                                                 self.sample_rate, r))
+            else:
+                self.get_logger().info(
+                    'device %r (%s) capturing %s at %d Hz'
+                    % (device, info['name'], dtype, r))
+            return r
+        raise RuntimeError(
+            'device %r (%s) accepts none of %s for mono %s: %s' % (
+                device, info['name'], candidates, dtype, '; '.join(errors)))
+
+    def _forget_capture_rate(self):
+        """An open failed: the device may have changed — re-probe next time."""
+        self._capture_rates.clear()
+
+    @staticmethod
+    def _to_int16(np, audio):
+        """float32 -1..1 -> int16 (openWakeWord input, wav samples)."""
+        return (np.clip(audio, -1.0, 1.0) * 32767.0).astype(np.int16)
 
     @staticmethod
     def _resample(np, audio, from_rate, to_rate):
